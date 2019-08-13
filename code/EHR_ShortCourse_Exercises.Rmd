@@ -1,0 +1,109 @@
+---
+title: "Analysis of Big Healthcare Databases - Exercises"
+output:
+  html_document:
+    toc: false 
+    depth: 3 
+    theme: paper 
+    highlight: tango
+---
+
+```{r set-options, echo=FALSE, cache=FALSE}
+options(width = 400)
+```  
+
+***
+
+#### Introduction
+
+The goal of these lab exercises is to explore the structure and some of the common challenges encountered in working with healthcare-derived data as well as practice implementing some statistical methods introduced throughout the short course to address these issues. To do this we will use a synthetic data set simulated to mimic the structure of a real electronic health records (EHR)-derived data set. <\bf>Please note that the data we will be working with are simulated and intended for instructional purposes only.<\bf> Real EHR data generally have access restrictions due to privacy/confidentiality issues and HIPAA protections. At the end of the course I will provide links for a few public access repositories that provide real EHR data. However, these generally do require a data use agreement and thus a few steps are involved in getting access.
+
+The first data set we will be investigating is based on the PEDSnet study of pediatric type 2 diabetes described in class. The structure of the data set is:
+
+<blockquote style="font-size:12px">
+ID:  Subject ID
+
+sex:  Sex:  0 = male, 1 = female
+
+
+age:  Age in years
+
+chol:  Serum total cholesterol, mg/dl
+
+BMI:  Body-mass index, kg/m2 
+
+TG:  Serum triglycerides, mg/dl
+
+APOE:  Apolipoprotein E genotype, with six genotypes coded 1-6:  1 = e2/e2, 2 = e2/e3, 
+3 = e2/e4, 4 = e3/e3, 5 = e3/e4, 6 = e4/e4
+
+rs174548:  Candidate SNP 1 genotype, chromosome 11, physical position 61,327,924.  Coded as the number of minor alleles:  0 = C/C, 1 = C/G, 2 = G/G.
+
+rs4775401:  Candidate SNP 2 genotype, chromosome 15, physical position 59,476,915.  Coded as the number of minor alleles: 0 = C/C, 1 = C/T, 2 = T/T.
+
+HTN:  diagnosed hypertension:  0 = no, 1 = yes
+
+chd:  diagnosis of coronary heart disease:  0 = no, 1 = yes
+
+</blockquote>
+
+You can download the data file and read it into R as follows:
+```{r, eval = FALSE}
+pedsnetsyn = read.csv("https://raw.githubusercontent.com/rhubb/ASA_EHR_ShortCourse/pedsnet_syn_data.csv", head=T)
+```
+
+***
+```{r, echo = FALSE}
+pedsnetsyn = read.csv("https://raw.githubusercontent.com/rhubb/ASA_EHR_ShortCourse/pedsnet_syn_data.csv", head=T)
+```
+#### Install R packages
+- For these exercises you will need the _gee_, _multcomp_ and _lmtest_ packages.
+- If you have not already, please install these packages now.
+```{r, eval=FALSE}
+install.packages("gee")
+install.packages("multcomp")
+install.packages("lmtest")
+library(gee)
+library(multcomp)
+library(lmtest)
+```
+```{r, eval=TRUE, message = FALSE, echo = FALSE}
+library(gee)
+library(multcomp)
+library(lmtest)
+```
+
+### Exercises
+We will first explore the data set using descriptive statistics and use simiple linear regression to investigate bivariate associations. The objective of this initial analysis is to explore the relationship between triglycerides and BMI.
+
+1\. Use plots and descriptive statistics to explore the variables triglycerides and BMI individually as well as their relationship to each other. Based on your graphical summaries does there appear to be an association between triglycerides and BMI?
+```{r, eval = FALSE, echo = TRUE}
+summary(TG)
+summary(BMI)
+group = 1*(BMI > 25)
+group=factor(group,levels=c(0,1), labels=c("<=25",">25"))
+table(group)
+by(TG, group, mean)
+by(TG, group, sd)
+hist(TG)
+hist(BMI)
+boxplot(TG~group,ylab="Triglycerides (mg/dl)")
+plot(TG ~ BMI, xlab = "BMI (kg/m2)", ylab = "Triglycerides (mg/dl)")
+```
+Topics to cover/illustrate in exercises
+- Structured vs unstructured data? (use AI to generate text strings using particular words or phrases?)
+- Ability to access additional data in unstructured data but difficulties with extracting, variability in recording
+- Some simple tools for text parsing (baby NLP)
+- Trends in use of ICD-9/10 codes (temporal changes such as code substitution)
+- Data quality issues such as implausible values, incorrect units
+- Different numbers of observations available per person (and possible informative sample size)
+- Phenotyping - implementing a simple rule-based phenotype, applying  a supervised learning algorithm (gold-standard labels available for a subet of data)
+- Missing data - using example from slide 37, how would we define "missing"? how much missingness is there using this definition? missingness mechanisms?
+- IPW with and without modularization?
+- Inverse intensity weighting (is there code or a package for this)?
+- Conditioning on number of encounters
+- Illustrate bias using one of the derived phenotypes from earlier compared to true disease status in relation to a predictor
+- Approaches to correcting for outcome misclassification: Magder and Hughes, integrated likelihood (code available online? probably too time intensive to implement but can point to), augmented estimation, simple adjustment method for predicted probabilities
+
+
+
