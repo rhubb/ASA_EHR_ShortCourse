@@ -92,21 +92,21 @@ T2DM: Type 2 diabetes status based on manual chart review (1 = T2DM, 0 = no evid
 - If you have not already, please install these packages now.
 ```{r, eval=FALSE}
 install.packages("RColorBrewer")
-install.packages("multcomp")
+install.packages("rpart")
 install.packages("lmtest")
 library(RColorBrewer)
-library(multcomp)
+library(rpart)
 library(lmtest)
 ```
 ```{r, eval=TRUE, message = FALSE, echo = FALSE}
-library(gee)
-library(multcomp)
+library(RColorBrewer)
+library(rpart)
 library(lmtest)
 ```
 
 ### Exercises
 1\. The first task in analysis of EHR data is data exploration and visualization to identify and resolve data errors. Using the measures data sets, we will carry out a descriptive analysis. Are there any observations that seem likely to be errors? What are some techniques we can use to identify errors? How should we handle erroneous data points once they have been identified?
-```{r, eval = TRUE, echo = TRUE}
+```{r, eval = TRUE, echo = TRUE, cache = TRUE}
 summary(measures)
 
 # separate variables by measurement type
@@ -181,22 +181,57 @@ height[height$patientid == names(height.decrease.ind[3]),]
 height$iddate <- paste(height$patientid,height$servicedate)
 weight$iddate <- paste(weight$patientid,weight$servicedate)
 bmi <- merge(height,weight,by = "iddate") # merge height and weight data 
+bmi$bmi <- bmi$weight/(bmi$height/100)^2
+
+par(mfrow = c(2,2))
+hist(bmi$bmi)
+plot(bmi$weight,bmi$bmi)
+plot(bmi$height,bmi$bmi)
+
+# unusual groupings in BMI plots suggest patients with wrong units for height or weight
+# select a rule for eliminating these heights or weights
+bmi$height <- ifelse(bmi$height > 250, bmi$height/2.54, bmi$height)
+bmi$bmi <- bmi$weight/(bmi$height/100)^2
+
+par(mfrow = c(1,2))
+hist(bmi$bmi)
+plot(bmi$weight,bmi$bmi)
 
 ```
 
-2\. We will next explore a few alternative approaches to deriving a type 2 diabetes (T2DM) phenotype from this data set. To do so, first reduce the data to one observation per patient considering what data elements might be of use at the patient-level. Next use the validation data to develop a prediction model for T2DM using logistic regression and CART. Finally, apply the eMERGE T2DM rule to these data. How do the sensitivity, specificity, PPV, and NPV of these approaches compare?
-```{r, eval = FALSE, echo = TRUE}
-summary(TG)
-summary(BMI)
-group = 1*(BMI > 25)
-group=factor(group,levels=c(0,1), labels=c("<=25",">25"))
-table(group)
-by(TG, group, mean)
-by(TG, group, sd)
-hist(TG)
-hist(BMI)
-boxplot(TG~group,ylab="Triglycerides (mg/dl)")
-plot(TG ~ BMI, xlab = "BMI (kg/m2)", ylab = "Triglycerides (mg/dl)")
+2\. We will next explore a few alternative approaches to deriving a type 2 diabetes (T2DM) phenotype from this data set. To do so, we first need to reduce the data to one observation per patient considering what data elements might be of use at the patient-level. Next we will use the validation data to develop a prediction model for T2DM using logistic regression and CART. Finally, we will apply the eMERGE T2DM rule to these data. How do the sensitivity, specificity, PPV, and NPV of these approaches compare?
+```{r, eval = TRUE, echo = TRUE, cache = TRUE}
+# for simplicity we will aggregate numeric measurements to the mean within this timeperiod
+bmi$bmimean <- unsplit(sapply(split(bmi$bmi,bmi$patientid.x),mean,na.rm = T),bmi$patientid.x)
+glucose$glucosemean <- unsplit(sapply(split(glucose$glucose,glucose$patientid),mean,na.rm = T),glucose$patientid)
+hba1c$hba1cmean <- unsplit(sapply(split(hba1c$hba1c,hba1c$patientid),mean,na.rm = T),hba1c$patientid)
+
+# look for any occurence of diabetes diagnosis codes, insulin, metformin,
+# or visit to an endocrinologist within the period of interest
+# T2DM ICD-9 = "250.00", T2DM ICD-10 = "E11.9", T1DM ICD-9 = 250.01, T1DM ICD-10 = "E10.9"
+# Endocrinologist Medicare specialty code = 46
+anycode <- function(x,code){
+  code.present <- x %in% code
+  return(sum(code.present)>0)
+}
+encounter$T2DM <- unsplit(sapply(split(encounter$diag,encounter$patientid),anycode,code = c("250.00","E11.9")),encounter$patientid)
+encounter$T1DM <- unsplit(sapply(split(encounter$diag,encounter$patientid),anycode,code = c("250.01","E10.9")),encounter$patientid)
+encounter$endo <- unsplit(sapply(split(encounter$prov,encounter$patientid),anycode,code = "46"),encounter$patientid)
+meds$anyinsulin <- unsplit(sapply(split(meds$drug,meds$patientid),anycode,code = "insulin"),meds$patientid)
+meds$anymetformin <- unsplit(sapply(split(meds$drug,meds$patientid),anycode,code = "metformin"),meds$patientid)
+
+encounter$agemean <- unsplit(sapply(split(encounter$age,encounter$patientid),mean,na.rm = T),encounter$patientid)
+
+# create merged dataset with one observation per patient and aggregate variables
+encounter1 <- encounter[!duplicated(encounter$patientid),c("patientid","agemean","race","gender","T2DM","T1DM","endo")]
+bmi1 <- bmi[!duplicated(bmi$patientid.x),c("patientid.x","bmimean")]
+names(bmi1) <- c("patientid","bmimean")
+glucose1 <- glucose[!duplicated(glucose$patientid),c("patientid","glucosemean")]
+hba1c1 <- hba1c[!duplicated(hba1c$patientid),c("patientid","hba1cmean")]
+meds1  <- meds[!duplicated(meds$patientid),c("patientid","anyinsulin","anymetformin")]
+
+data1 <- Reduce(function(x,y){merge(x,y, all = T)},list(encounter1,bmi1,glucose1,hba1c1,meds1,validation))
+
 ```
 
 3\. Next we will explore missing data in an EHR-derived data set. Suppose we want to use our T2DM phenotype from exercise 2 to explore the relationship between BMI and subsequent T2DM. How might we define BMI? Using this definition, how much missingness is there? Is missingness related to any other factors in the data set? Use IPW with a single module or multiple modules to account for missingness in your analysis of the association between BMI and T2DM. 
