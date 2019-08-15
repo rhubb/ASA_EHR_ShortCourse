@@ -91,10 +91,10 @@ T2DM: Type 2 diabetes status based on manual chart review (1 = T2DM, 0 = no evid
 - For these exercises you will need the _gee_, _multcomp_ and _lmtest_ packages.
 - If you have not already, please install these packages now.
 ```{r, eval=FALSE}
-install.packages("gee")
+install.packages("RColorBrewer")
 install.packages("multcomp")
 install.packages("lmtest")
-library(gee)
+library(RColorBrewer)
 library(multcomp)
 library(lmtest)
 ```
@@ -147,7 +147,40 @@ extreme.heights <- weight$patientid[height$height > 300] # flag patients with he
 extreme.weights <- weight$patientid[weight$weight > 200] # flag patients with weight > 200 kg
 
 # look for implausible patterns in longitudinal measurements
+height.s <- split(data.frame(height$servicedate,height$height),height$patientid)
+weight.s <- split(data.frame(as.Date(weight$servicedate),weight$weight),weight$patientid)
+glucose.s <- split(data.frame(as.Date(glucose$servicedate),glucose$glucose),glucose$patientid)
+hba1c.s <- split(data.frame(as.Date(hba1c$servicedate),hba1c$hba1c),hba1c$patientid)
 
+# summarize rate of change and within-patient variability
+longrate <- function(x){
+  days <- as.numeric(as.Date(x[,1]))
+  measure <- x[,2]
+  mod <- lm(measure ~ days)
+  rate <- mod$coef[2]
+  residsd <- summary(mod)$sigma
+  return(c(rate,residsd))
+}
+
+height.lm <- t(sapply(height.s,longrate))
+
+# take a look at a few patients with implausible trajectories
+height.decrease.ind <- which(height.lm[,1] < -1)     
+par(mfrow = c(3,3))
+for (i in 1:9){
+  plot(as.numeric(as.Date(height.s[[height.decrease.ind[i]]][,1])),height.s[[height.decrease.ind[i]]][,2])
+}
+
+# a few of these measures look very suspicious, as if one measurement is about 2.5 times the other
+# take a closer look at an example case
+height[height$patientid == names(height.decrease.ind[3]),]
+
+# could also look at adjacent pairs of measures to look for implausible sequential changes
+
+# generate BMI and look for implausible values
+height$iddate <- paste(height$patientid,height$servicedate)
+weight$iddate <- paste(weight$patientid,weight$servicedate)
+bmi <- merge(height,weight,by = "iddate") # merge height and weight data 
 
 ```
 
