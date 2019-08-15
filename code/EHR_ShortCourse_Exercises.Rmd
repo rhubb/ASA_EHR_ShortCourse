@@ -241,7 +241,7 @@ data1$anyinsulin <- ifelse(is.na(data1$anyinsulin),FALSE,data1$anyinsulin)
 data1$anymetformin <- ifelse(is.na(data1$anymetformin),FALSE,data1$anymetformin)
 
 # use validation data to construct prediction model for T2DM
-mod.glm <- glm(T2DMv ~ agemean + factor(race) + factor(gender) + T2DM + T1DM + endo + bmimean + anyinsulin + anymetformin + anyglucose + anyhba1c)
+mod.glm <- glm(T2DMv ~ agemean + factor(race) + factor(gender) + T2DM + T1DM + endo + bmimean + anyglucose + anyhba1c, data = data1, family = "binomial")
 
 ```
 
