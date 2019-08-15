@@ -16,46 +16,77 @@ options(width = 400)
 
 #### Introduction
 
-The goal of these lab exercises is to explore the structure and some of the common challenges encountered in working with healthcare-derived data as well as practice implementing some statistical methods introduced throughout the short course to address these issues. To do this we will use a synthetic data set simulated to mimic the structure of a real electronic health records (EHR)-derived data set. <\bf>Please note that the data we will be working with are simulated and intended for instructional purposes only.<\bf> Real EHR data generally have access restrictions due to privacy/confidentiality issues and HIPAA protections. At the end of the course I will provide links for a few public access repositories that provide real EHR data. However, these generally do require a data use agreement and thus a few steps are involved in getting access.
+The goal of these exercises is to explore the structure of an electronic health records (EHR)-derived data set and some of the common challenges encountered in working with healthcare-derived data. We will also practice implementing some statistical methods introduced throughout the short course to address these issues. To do this we will use a synthetic data set simulated to mimic the structure of a real EHR-derived data set. <\bf>Please note that the data we will be working with are simulated and intended for instructional purposes only.<\bf> Real EHR data generally have access restrictions due to privacy/confidentiality issues and HIPAA protections. At the end of the course I will provide links for a few public access repositories that provide real EHR data. However, these generally do require a data use agreement and thus a few steps are involved in getting access.
 
-The first data set we will be investigating is based on the PEDSnet study of pediatric type 2 diabetes described in class. The structure of the data set is:
+The synthetic data we will be working with is based on the PEDSnet study of pediatric type 2 diabetes described in class. The data are divided into four files which can be downloaded from GitHub. The four files contain data from 67,355 patients age 10-20 years who had at least one outpatient encounter between 2001 and 2019. The four files can be linked using the variable patientid.
 
+#### Encounter data
+This data set includes one row per outpatient encounter. 
+```{r, eval = TRUE, echo = TRUE}
+encounter = read.csv("https://raw.githubusercontent.com/rhubb/ASA_EHR_ShortCourse/master/data/encounter.csv", head=T)
+```
 <blockquote style="font-size:12px">
-ID:  Subject ID
+patientid:  Patient ID
 
-sex:  Sex:  0 = male, 1 = female
-
+servicedate: Date of the encounter
 
 age:  Age in years
 
-chol:  Serum total cholesterol, mg/dl
+race: Provider-reported patient race
 
-BMI:  Body-mass index, kg/m2 
+proc:  CPT codes for procedure performed
 
-TG:  Serum triglycerides, mg/dl
+diag: ICD-9 (on or before 10/31/2015) or ICD-10 (after 10/31/2015) for primary diagnosis
 
-APOE:  Apolipoprotein E genotype, with six genotypes coded 1-6:  1 = e2/e2, 2 = e2/e3, 
-3 = e2/e4, 4 = e3/e3, 5 = e3/e4, 6 = e4/e4
-
-rs174548:  Candidate SNP 1 genotype, chromosome 11, physical position 61,327,924.  Coded as the number of minor alleles:  0 = C/C, 1 = C/G, 2 = G/G.
-
-rs4775401:  Candidate SNP 2 genotype, chromosome 15, physical position 59,476,915.  Coded as the number of minor alleles: 0 = C/C, 1 = C/T, 2 = T/T.
-
-HTN:  diagnosed hypertension:  0 = no, 1 = yes
-
-chd:  diagnosis of coronary heart disease:  0 = no, 1 = yes
+prov: CMS provider specialty code
 
 </blockquote>
 
-You can download the data file and read it into R as follows:
-```{r, eval = FALSE}
-pedsnetsyn = read.csv("https://raw.githubusercontent.com/rhubb/ASA_EHR_ShortCourse/pedsnet_syn_data.csv", head=T)
+#### Prescription medication data
+This data set includes one row per prescription recorded on the date of an outpatient encounter included in the encounters file. 
+```{r, eval = TRUE, echo = TRUE}
+meds = read.csv("https://raw.githubusercontent.com/rhubb/ASA_EHR_ShortCourse/master/data/meds.csv", head=T)
 ```
 
-***
-```{r, echo = FALSE}
-pedsnetsyn = read.csv("https://raw.githubusercontent.com/rhubb/ASA_EHR_ShortCourse/pedsnet_syn_data.csv", head=T)
+<blockquote style="font-size:12px">
+patientid:  Patient ID
+
+presdate: Date of the prescription
+
+drug:  Drug class
+
+</blockquote>
+
+#### Measures data
+This data set includes one row per anthropometric or laboratory measurement recorded on the date of an outpatient encounter included in the encounters file. 
+```{r, eval = TRUE, echo = TRUE}
+measures = read.csv("https://raw.githubusercontent.com/rhubb/ASA_EHR_ShortCourse/master/data/measures.csv", head=T)
 ```
+
+<blockquote style="font-size:12px">
+patientid:  Patient ID
+
+service: Date of measurement
+
+measurement: Numeric value of the measurement
+
+measuretype: Description of the laboratory or anthropometric test (height in cm, weight in kg, glucose in mg/dl, hemoglobin A1c (hba1c) in \%)
+
+</blockquote>
+
+#### Validation data
+This data set includes one row per patient for 998 patients randomly selected for manual chart review to determine gold-standard type 2 diabetes status. 
+```{r, eval = TRUE, echo = TRUE}
+validation = read.csv("https://raw.githubusercontent.com/rhubb/ASA_EHR_ShortCourse/master/data/validation.csv", head=T)
+```
+
+<blockquote style="font-size:12px">
+patientid:  Patient ID
+
+T2DM: Type 2 diabetes status based on manual chart review (1 = T2DM, 0 = no evidence of T2DM)
+
+</blockquote>
+
 #### Install R packages
 - For these exercises you will need the _gee_, _multcomp_ and _lmtest_ packages.
 - If you have not already, please install these packages now.
@@ -74,9 +105,53 @@ library(lmtest)
 ```
 
 ### Exercises
-We will first explore the data set using descriptive statistics and use simiple linear regression to investigate bivariate associations. The objective of this initial analysis is to explore the relationship between triglycerides and BMI.
+1\. The first task in analysis of EHR data is data exploration and visualization to identify and resolve data errors. Using the measures data sets, we will carry out a descriptive analysis. Are there any observations that seem likely to be errors? What are some techniques we can use to identify errors? How should we handle erroneous data points once they have been identified?
+```{r, eval = TRUE, echo = TRUE}
+summary(measures)
 
-1\. Use plots and descriptive statistics to explore the variables triglycerides and BMI individually as well as their relationship to each other. Based on your graphical summaries does there appear to be an association between triglycerides and BMI?
+# separate variables by measurement type
+height <- measures[measures$measuretype == "height",-4]
+names(height) <- c("patientid","servicedate","height")
+
+weight <- measures[measures$measuretype == "weight",-4]
+names(weight) <- c("patientid","servicedate","weight")
+
+glucose <- measures[measures$measuretype == "glucose",-4]
+names(glucose) <- c("patientid","servicedate","glucose")
+
+hba1c <- measures[measures$measuretype == "hba1c",-4]
+names(hba1c) <- c("patientid","servicedate","hba1c")
+
+# explore number of observations available per patient for each measurement type
+summary(c(table(factor(height$patientid, levels = unique(encounter$patientid)))))
+summary(c(table(factor(weight$patientid, levels = unique(encounter$patientid)))))
+summary(c(table(factor(glucose$patientid, levels = unique(encounter$patientid)))))
+summary(c(table(factor(hba1c$patientid, levels = unique(encounter$patientid)))))
+
+# number of children with no measures available
+sum(c(table(factor(height$patientid, levels = unique(encounter$patientid)))) == 0)
+sum(c(table(factor(weight$patientid, levels = unique(encounter$patientid)))) == 0)
+sum(c(table(factor(glucose$patientid, levels = unique(encounter$patientid)))) == 0)
+sum(c(table(factor(hba1c$patientid, levels = unique(encounter$patientid)))) == 0)
+
+# summarize distribution of variables across all patients, look for values outside plausible range
+summary(height$height)
+summary(weight$weight)
+summary(glucose$glucose)
+summary(hba1c$hba1c)
+
+# values that are clearly outside plausible range can be eliminated, those that seem unlikely should be
+# noted for discussion with clinical collaborators
+weight$weight <- ifelse(weight$weight < 0, NA, weight$weight)
+extreme.heights <- weight$patientid[height$height > 300] # flag patients with height > 3 m
+extreme.weights <- weight$patientid[weight$weight > 200] # flag patients with weight > 200 kg
+
+# look for implausible patterns in longitudinal measurements
+
+
+```
+
+2\. We will next explore a few alternative approaches to deriving a type 2 diabetes (T2DM) phenotype from this data set. To do so, first reduce the data to one observation per patient considering what data elements might be of use at the patient-level. Next use the validation data to develop a prediction model for T2DM using logistic regression and CART. Finally, apply the eMERGE T2DM rule to these data. How do the sensitivity, specificity, PPV, and NPV of these approaches compare?
 ```{r, eval = FALSE, echo = TRUE}
 summary(TG)
 summary(BMI)
@@ -90,20 +165,63 @@ hist(BMI)
 boxplot(TG~group,ylab="Triglycerides (mg/dl)")
 plot(TG ~ BMI, xlab = "BMI (kg/m2)", ylab = "Triglycerides (mg/dl)")
 ```
-Topics to cover/illustrate in exercises
-- Structured vs unstructured data? (use AI to generate text strings using particular words or phrases?)
-- Ability to access additional data in unstructured data but difficulties with extracting, variability in recording
-- Some simple tools for text parsing (baby NLP)
-- Trends in use of ICD-9/10 codes (temporal changes such as code substitution)
-- Data quality issues such as implausible values, incorrect units
-- Different numbers of observations available per person (and possible informative sample size)
-- Phenotyping - implementing a simple rule-based phenotype, applying  a supervised learning algorithm (gold-standard labels available for a subet of data)
-- Missing data - using example from slide 37, how would we define "missing"? how much missingness is there using this definition? missingness mechanisms?
-- IPW with and without modularization?
-- Inverse intensity weighting (is there code or a package for this)?
-- Conditioning on number of encounters
-- Illustrate bias using one of the derived phenotypes from earlier compared to true disease status in relation to a predictor
-- Approaches to correcting for outcome misclassification: Magder and Hughes, integrated likelihood (code available online? probably too time intensive to implement but can point to), augmented estimation, simple adjustment method for predicted probabilities
 
+3\. Next we will explore missing data in an EHR-derived data set. Suppose we want to use our T2DM phenotype from exercise 2 to explore the relationship between BMI and subsequent T2DM. How might we define BMI? Using this definition, how much missingness is there? Is missingness related to any other factors in the data set? Use IPW with a single module or multiple modules to account for missingness in your analysis of the association between BMI and T2DM. 
+```{r, eval = FALSE, echo = TRUE}
+summary(TG)
+summary(BMI)
+group = 1*(BMI > 25)
+group=factor(group,levels=c(0,1), labels=c("<=25",">25"))
+table(group)
+by(TG, group, mean)
+by(TG, group, sd)
+hist(TG)
+hist(BMI)
+boxplot(TG~group,ylab="Triglycerides (mg/dl)")
+plot(TG ~ BMI, xlab = "BMI (kg/m2)", ylab = "Triglycerides (mg/dl)")
+```
 
+4\. Accounting for the intensity of healthcare utilization in analyses. How much variability is there in the intensity of utilization in this data set? Use a measure of intensity of utilization to account for informative observation in your analysis of the association between BMI and T2DM.
+```{r, eval = FALSE, echo = TRUE}
+summary(TG)
+summary(BMI)
+group = 1*(BMI > 25)
+group=factor(group,levels=c(0,1), labels=c("<=25",">25"))
+table(group)
+by(TG, group, mean)
+by(TG, group, sd)
+hist(TG)
+hist(BMI)
+boxplot(TG~group,ylab="Triglycerides (mg/dl)")
+plot(TG ~ BMI, xlab = "BMI (kg/m2)", ylab = "Triglycerides (mg/dl)")
+```
 
+5\. Use the classic Magder and Hughes approach to accounting for outcome misclassification to account for phenotyping error in your analysis of the association between BMI and T2DM.
+```{r, eval = FALSE, echo = TRUE}
+summary(TG)
+summary(BMI)
+group = 1*(BMI > 25)
+group=factor(group,levels=c(0,1), labels=c("<=25",">25"))
+table(group)
+by(TG, group, mean)
+by(TG, group, sd)
+hist(TG)
+hist(BMI)
+boxplot(TG~group,ylab="Triglycerides (mg/dl)")
+plot(TG ~ BMI, xlab = "BMI (kg/m2)", ylab = "Triglycerides (mg/dl)")
+```
+
+6\. Using predicted probabilities from your logistic regression-based phenotype derived in exercise 2, estimate the association between BMI and T2DM. How do your results change if you use the bias correction approach described in lecture vs the uncorrected results?
+```{r, eval = FALSE, echo = TRUE}
+summary(TG)
+summary(BMI)
+group = 1*(BMI > 25)
+group=factor(group,levels=c(0,1), labels=c("<=25",">25"))
+table(group)
+by(TG, group, mean)
+by(TG, group, sd)
+hist(TG)
+hist(BMI)
+boxplot(TG~group,ylab="Triglycerides (mg/dl)")
+plot(TG ~ BMI, xlab = "BMI (kg/m2)", ylab = "Triglycerides (mg/dl)")
+```
