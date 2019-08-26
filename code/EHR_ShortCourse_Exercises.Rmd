@@ -10,6 +10,9 @@ output:
 
 ```{r set-options, echo=FALSE, cache=FALSE}
 options(width = 400)
+## Changes to dataset:
+## NEED TO MODIFY DATA SET TO BUILD IN ASSOCIATION BETWEEN BMI AND INTENSITY
+## BUILD IN STRONGER ASSOCIATION BETWEEN ENDOCRINOLOGIST VISIT AND T2DM
 ```  
 
 ***
@@ -88,25 +91,31 @@ T2DM: Type 2 diabetes status based on manual chart review (1 = T2DM, 0 = no evid
 </blockquote>
 
 #### Install R packages
-- For these exercises you will need the _gee_, _multcomp_ and _lmtest_ packages.
+- For these exercises you will need the _rpart_, _pROC_ and _boot_ packages.
 - If you have not already, please install these packages now.
 ```{r, eval=FALSE}
 install.packages("RColorBrewer")
 install.packages("rpart")
 install.packages("pROC")
+install.packages("boot")
+install.packages("gee")
 library(RColorBrewer)
 library(rpart)
 library(pROC)
+library(boot)
+library(gee)
 ```
 ```{r, eval=TRUE, message = FALSE, echo = FALSE}
 library(RColorBrewer)
 library(rpart)
 library(pROC)
+library(boot)
+library(gee)
 ```
 
 ### Exercises
-1\. The first task in analysis of EHR data is data exploration and visualization to identify and resolve data errors. Using the measures data sets, we will carry out a descriptive analysis. Are there any observations that seem likely to be errors? What are some techniques we can use to identify errors? How should we handle erroneous data points once they have been identified?
-```{r, eval = TRUE, echo = TRUE, cache = TRUE}
+1\. **Data Quality Evaluation** The first task in analysis of EHR data is data exploration and visualization to identify and resolve data errors. Using the measures data sets, we will carry out a descriptive analysis. Are there any observations that seem likely to be errors? What are some techniques we can use to identify errors? How should we handle erroneous data points once they have been identified?
+```{r, eval = TRUE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
 summary(measures)
 
 # separate variables by measurement type
@@ -199,12 +208,18 @@ plot(bmi$weight,bmi$bmi)
 
 ```
 
-2\. We will next explore a few alternative approaches to deriving a type 2 diabetes (T2DM) phenotype from this data set. To do so, we first need to reduce the data to one observation per patient considering what data elements might be of use at the patient-level. Next we will use the validation data to develop a prediction model for T2DM using logistic regression and CART. Finally, we will apply the eMERGE T2DM rule to these data. How do the sensitivity, specificity, PPV, and NPV of these approaches compare?
-```{r, eval = TRUE, echo = TRUE, cache = TRUE}
-# for simplicity we will aggregate numeric measurements to the mean within this timeperiod
+2\. **Phenotype Extraction** We will next explore a few alternative approaches to deriving a type 2 diabetes (T2DM) phenotype from this data set. To do so, we first need to reduce the data to one observation per patient considering what data elements might be of use at the patient-level. Next we will use the validation data to develop a prediction model for T2DM using logistic regression and CART. Finally, we will apply the eMERGE T2DM rule to these data. How do the sensitivity, specificity, PPV, and NPV of these approaches compare?
+```{r, eval = TRUE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
+# for simplicity we will aggregate numeric measurements to the earlist, mean and maximum within this timeperiod
 bmi$bmimean <- unsplit(sapply(split(bmi$bmi,bmi$patientid.x),mean,na.rm = T),bmi$patientid.x)
+bmi$bmimax <- unsplit(sapply(split(bmi$bmi,bmi$patientid.x),max,na.rm = T),bmi$patientid.x)
+bmi$firstbmi <- unsplit(sapply(split(bmi$bmi,bmi$patientid.x),function(x){x[1]}),bmi$patientid.x)
+
 glucose$glucosemean <- unsplit(sapply(split(glucose$glucose,glucose$patientid),mean,na.rm = T),glucose$patientid)
 hba1c$hba1cmean <- unsplit(sapply(split(hba1c$hba1c,hba1c$patientid),mean,na.rm = T),hba1c$patientid)
+bmi$bmimax <- unsplit(sapply(split(bmi$bmi,bmi$patientid.x),max,na.rm = T),bmi$patientid.x)
+glucose$glucosemax <- unsplit(sapply(split(glucose$glucose,glucose$patientid),max,na.rm = T),glucose$patientid)
+hba1c$hba1cmax <- unsplit(sapply(split(hba1c$hba1c,hba1c$patientid),max,na.rm = T),hba1c$patientid)
 
 # look for any occurence of diabetes diagnosis codes, insulin, metformin,
 # or visit to an endocrinologist within the period of interest
@@ -214,21 +229,44 @@ anycode <- function(x,code){
   code.present <- x %in% code
   return(sum(code.present)>0)
 }
+
+# Count number of occurences of code
+sumcode <- function(x,code){
+  code.present <- x %in% code
+  return(sum(code.present))
+}
+
+# Determine whether metformin prescription precedes insulin prescription
+# Returns 1 if only metformin prescribed or metformin prescribed before insulin
+# otherwise returns 0
+codeorder <- function(x){
+  metdates <- as.Date(x$dates[x$drugs == "metformin"])
+  insdates <- as.Date(x$dates[x$drugs == "insulin"])
+  if (length(metdates) == 0) metfirst <- 0
+  else if (length(metdates) > 0 & length(insdates) == 0) metfirst <- 1
+  else if (length(metdates) == 0 & length(insdates) == 0) metfirst <- 0
+  else metfirst <- suppressMessages(1*(min(metdates) < min(insdates)))
+  return(metfirst)
+}
+
 encounter$T2DM <- unsplit(sapply(split(encounter$diag,encounter$patientid),anycode,code = c("250.00","E11.9")),encounter$patientid)
+encounter$T2DMnum <- unsplit(sapply(split(encounter$diag,encounter$patientid),sumcode,code = c("250.00","E11.9")),encounter$patientid) # number of occurence of T2DM code
 encounter$T1DM <- unsplit(sapply(split(encounter$diag,encounter$patientid),anycode,code = c("250.01","E10.9")),encounter$patientid)
 encounter$endo <- unsplit(sapply(split(encounter$prov,encounter$patientid),anycode,code = "46"),encounter$patientid)
 meds$anyinsulin <- unsplit(sapply(split(meds$drug,meds$patientid),anycode,code = "insulin"),meds$patientid)
 meds$anymetformin <- unsplit(sapply(split(meds$drug,meds$patientid),anycode,code = "metformin"),meds$patientid)
+meds$metforminfirst <- unsplit(sapply(split(data.frame(dates=meds$presdate,drugs=meds$drug),
+                       meds$patientid),codeorder),meds$patientid)
 
 encounter$agemean <- unsplit(sapply(split(encounter$age,encounter$patientid),mean,na.rm = T),encounter$patientid)
 
 # create merged dataset with one observation per patient and aggregate variables
-encounter1 <- encounter[!duplicated(encounter$patientid),c("patientid","agemean","race","gender","T2DM","T1DM","endo")]
-bmi1 <- bmi[!duplicated(bmi$patientid.x),c("patientid.x","bmimean")]
-names(bmi1) <- c("patientid","bmimean")
-glucose1 <- glucose[!duplicated(glucose$patientid),c("patientid","glucosemean")]
-hba1c1 <- hba1c[!duplicated(hba1c$patientid),c("patientid","hba1cmean")]
-meds1  <- meds[!duplicated(meds$patientid),c("patientid","anyinsulin","anymetformin")]
+encounter1 <- encounter[!duplicated(encounter$patientid),c("patientid","agemean","race","gender","T2DM","T1DM","endo","T2DMnum")]
+bmi1 <- bmi[!duplicated(bmi$patientid.x),c("patientid.x","bmimean","bmimax","firstbmi")]
+names(bmi1) <- c("patientid","bmimean","bmimax","firstbmi")
+glucose1 <- glucose[!duplicated(glucose$patientid),c("patientid","glucosemean","glucosemax")]
+hba1c1 <- hba1c[!duplicated(hba1c$patientid),c("patientid","hba1cmean","hba1cmax")]
+meds1  <- meds[!duplicated(meds$patientid),c("patientid","anyinsulin","anymetformin","metforminfirst")]
 
 data1 <- Reduce(function(x,y){merge(x,y, all = T)},list(encounter1,bmi1,glucose1,hba1c1,meds1,validation))
 
@@ -240,7 +278,7 @@ data1$anyhba1c   <- !is.na(data1$hba1cmean)
 data1$anyinsulin <- ifelse(is.na(data1$anyinsulin),FALSE,data1$anyinsulin)
 data1$anymetformin <- ifelse(is.na(data1$anymetformin),FALSE,data1$anymetformin)
 
-# use validation data to construct prediction model for T2DM
+# Use gold standard labels from validation data set to construct prediction models for T2DM
 
 # Logistic regression
 mod.glm <- glm(T2DMv ~ agemean + factor(race) + factor(gender) + T2DM + T1DM + endo + bmimean + anyglucose + anyhba1c, data = data1, family = "binomial")
@@ -251,82 +289,202 @@ pred.glm <- na.omit(data.frame(pred = data1$T2DMglm,true = data1$T2DMv))
 
 perf.glm <- roc(pred.glm$true, pred.glm$pred, auc = TRUE, print.auc = TRUE, show.thres = TRUE)
 plot(perf.glm)
+print("Logistic regression AUC")
 perf.glm$auc
 
 # CART
-mod.cart <- rpart(T2DMv ~ agemean + factor(race) + factor(gender) + T2DM + T1DM + endo + bmimean + anyglucose + anyhba1c, data = data1, method = "class")
+mod.cart <- rpart(T2DMv ~ agemean + factor(race) + factor(gender) + T2DM + T1DM + bmimean + anyglucose + anyhba1c + glucosemean + hba1cmean, data = data1, method = "class")
 mod.pruned<- prune(mod.cart, cp= mod.cart$cptable[which.min(mod.cart$cptable[,"xerror"]),"CP"])
 plot(mod.pruned)
 text(mod.pruned)
 
 data1$T2DMcart <- predict(mod.pruned, newdata = data1, type = "prob")
+data1$T2DMcart.class <- predict(mod.pruned, newdata = data1, type = "class")
 
 pred.cart <- na.omit(data.frame(pred = data1$T2DMcart[,2],true = data1$T2DMv))
 
 perf.cart <- roc(pred.cart$true, pred.cart$pred, auc = TRUE, print.auc = TRUE, show.thres = TRUE)
 plot(perf.cart)
+print("CART AUC")
 perf.cart$auc
 
 # Apply eMERGE T2DM rule (need to also get number of T2DM codes and insulin before metformin)
+T2DM.rule <- function(x){
+  if (x$T1DM ==1) T2DM <- 0
+  else{
+    if (x$T2DM ==1){
+      if (x$anyinsulin == 1){
+        if (x$anymetformin == 0){
+          if (x$T2DMnum < 2){
+            T2DM <- 0
+          } else{
+            T2DM <- 1
+          }
+        } else{
+          if (x$metforminfirst == 0){
+            T2DM <- 0
+          } else{
+            T2DM <- 1
+          }
+        }
+      } else{
+        if (x$anymetformin == 1){
+          T2DM <- 1
+        } else{
+          if ((!is.na(x$glucosemax) & x$glucosemax > 200) | (!is.na(x$hba1cmax) & x$hba1cmax > 6.5)){
+            T2DM <- 1
+          } else{
+            T2DM <- 0
+          }
+        }
+      }
+    } else{
+      if (x$anymetformin == 0){
+        T2DM <- 0
+      } else{
+        if ((!is.na(x$glucosemax) & x$glucosemax > 200) | (!is.na(x$hba1cmax) & x$hba1cmax > 6.5)){
+          T2DM <- 1
+        } else{
+          T2DM <- 0
+        }
+      }
+    }
+  }
+  return(T2DM)
+}
+
+data1$T2DMemerge <- unsplit(sapply(split(data1,data1$patientid),T2DM.rule),data1$patientid)
+
+print("eMERGE specificity")
+1-mean(data1$T2DMemerge[data1$T2DMv == 0 & !is.na(data1$T2DMv)])
+print("eMERGE sensitivity")
+mean(data1$T2DMemerge[data1$T2DMv == 1 & !is.na(data1$T2DMv)])
+print("eMERGE PPV")
+1-mean(data1$T2DMv[data1$T2DMemerge == 0],na.rm = T)
+print("eMERGE NPV")
+mean(data1$T2DMv[data1$T2DMemerge == 1 ],na.rm = T)
+```
+
+3\. ** Missing Data** Next we will explore missing data in an EHR-derived data set. Suppose we want to use our T2DM phenotype from exercise 2 to explore the relationship between hemoglobin A1c and T2DM diagnosis. How might we define HbA1c? Using this definition, how much missingness is there? Is missingness related to any other factors in the data set? Use IPW with a single module or multiple modules to account for missingness in your analysis of the association between BMI and T2DM. 
+```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
+
+## There are many ways to quantify HbA1c including HbA1c at a specified age. We will use the mean HbA1c
+## across the observations included in the data set. Note that this gives rise to a cross-sectional
+## analysis in which we do not know if elevated HbA1c preceded or followed T2DM diagnosis
+
+# Percent missing HbA1c
+mean(is.na(data1$hba1cmean))
+
+# Look for factors associated with HbA1c
+
 
 ```
 
-3\. Next we will explore missing data in an EHR-derived data set. Suppose we want to use our T2DM phenotype from exercise 2 to explore the relationship between BMI and subsequent T2DM. How might we define BMI? Using this definition, how much missingness is there? Is missingness related to any other factors in the data set? Use IPW with a single module or multiple modules to account for missingness in your analysis of the association between BMI and T2DM. 
-```{r, eval = FALSE, echo = TRUE}
-summary(TG)
-summary(BMI)
-group = 1*(BMI > 25)
-group=factor(group,levels=c(0,1), labels=c("<=25",">25"))
-table(group)
-by(TG, group, mean)
-by(TG, group, sd)
-hist(TG)
-hist(BMI)
-boxplot(TG~group,ylab="Triglycerides (mg/dl)")
-plot(TG ~ BMI, xlab = "BMI (kg/m2)", ylab = "Triglycerides (mg/dl)")
+4\. **Confounding by Utilization** Accounting for the intensity of healthcare utilization in analyses. How much variability is there in the intensity of utilization in this data set? Use a measure of intensity of utilization to account for informative observation in an analysis of the association between BMI and T2DM.
+```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
+## Number of encounters per patient
+encounter$numvisit <- unsplit(sapply(split(encounter$servicedate,encounter$patientid),function(x){
+  length(x)}),encounter$patientid)
+summary(encounter$numvisit)
+
+## Merge number of encounters onto data set with one observation per patient
+numvisit <- encounter[!duplicated(encounter$patientid),c("patientid","numvisit")]
+data1 <- merge(data1,numvisit)
+
+## Analyze association between BMI and T2DM with and without conditioning on visit intensity
+bmi.glm1 <- glm(T2DMv ~ bmimean, data = data1, family = "binomial")
+bmi.glm2 <- glm(T2DMv ~ bmimean + numvisit, data = data1, family = "binomial")
+
 ```
 
-4\. Accounting for the intensity of healthcare utilization in analyses. How much variability is there in the intensity of utilization in this data set? Use a measure of intensity of utilization to account for informative observation in your analysis of the association between BMI and T2DM.
-```{r, eval = FALSE, echo = TRUE}
-summary(TG)
-summary(BMI)
-group = 1*(BMI > 25)
-group=factor(group,levels=c(0,1), labels=c("<=25",">25"))
-table(group)
-by(TG, group, mean)
-by(TG, group, sd)
-hist(TG)
-hist(BMI)
-boxplot(TG~group,ylab="Triglycerides (mg/dl)")
-plot(TG ~ BMI, xlab = "BMI (kg/m2)", ylab = "Triglycerides (mg/dl)")
+5\. **Outcome Misclassification** Use the classic Magder and Hughes approach to accounting for outcome misclassification to account for phenotyping error in an analysis of the association between making an endocrinologist visit and T2DM using the CART-derived T2DM phenotype.
+```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
+## Analysis without additional adjustment variables
+sens <- mean(as.numeric(as.character(data1$T2DMcart.class[data1$T2DMv == 1 & !is.na(data1$T2DMv)])))
+spec <- 1-mean(as.numeric(as.character(data1$T2DMcart.class[data1$T2DMv == 0 & !is.na(data1$T2DMv)])))
+
+a <- sum(data1$T2DMcart.class == 1 & data1$endo == 1)
+b <- sum(data1$T2DMcart.class == 0 & data1$endo == 1)
+c <- sum(data1$T2DMcart.class == 1 & data1$endo == 0)
+d <- sum(data1$T2DMcart.class == 0 & data1$endo == 0)
+or.std <- a*d/(b*c)
+or.mh <- (a/(a+b)-(1-spec))/(c/(c+d)-(1-spec))*(sens-c/(c+d))/(sens-a/(a+b))
+
+## Adjusted analysis via logistic regression using EM algorithm
+
+# posterior probability of Y
+post.prob <- function(phat,S,sens,spec){
+  post.probY <- ifelse(S== 1, sens*phat/(sens*phat+(1-spec)*(1-phat)),
+                       (1-spec)*phat/((1-spec)*phat+sens*(1-phat)))
+  return(post.probY)
+}
+
+# EM algorithm proposed by Magder and Hughes
+mh.EM <- function(fmla, sens, spec, tol = 10^-4, maxit = 10){
+  data1$Y <- data1$T2DMcart.class
+  or1 <- glm(fmla, data = data1, family = "binomial")
+  p0 <- predict(or1, type = "response")
+  dif <- 1
+  j <- 0
+  while (dif > tol & j < maxit){
+    w <- post.prob(p0,data1$T2DMcart.class,sens,spec)
+    data2 <- rbind(data1, data1)
+    data2$w <- c(w,1-w)
+    data2$Y <- c(rep(1,nrow(data1)),rep(0,nrow(data1)))
+    suppressWarnings(or2 <- glm(fmla, data = data2, family = "binomial", weights = w))
+    p0 <- predict(or2, type = "response")
+    dif <- max(abs(or1$coef-or2$coef))
+    or1 <- or2
+    j <- j+1
+  }
+  if (dif > tol) return("Did not converge")
+  else return(or2)
+}
+
+# fit model
+fmla.endo <- formula("Y ~ agemean + factor(race) + gender + endo")
+mod.MH <- mh.EM(fmla.endo, sens, spec, maxit = 40)
+summary(mod.MH)
 ```
 
-5\. Use the classic Magder and Hughes approach to accounting for outcome misclassification to account for phenotyping error in your analysis of the association between BMI and T2DM.
-```{r, eval = FALSE, echo = TRUE}
-summary(TG)
-summary(BMI)
-group = 1*(BMI > 25)
-group=factor(group,levels=c(0,1), labels=c("<=25",">25"))
-table(group)
-by(TG, group, mean)
-by(TG, group, sd)
-hist(TG)
-hist(BMI)
-boxplot(TG~group,ylab="Triglycerides (mg/dl)")
-plot(TG ~ BMI, xlab = "BMI (kg/m2)", ylab = "Triglycerides (mg/dl)")
-```
+6\. **Using Probabilistic Phenotypes** Using predicted probabilities from your logistic regression-based phenotype derived in exercise 2, estimate the association between making a visit to the endocrinologist and T2DM. How do your results change if you use the bias correction approach described in lecture vs the uncorrected results?
+```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
+# Function for bias correction with known values for mu0 and mu1
+# link can take values "ident", "log", or "logistic"
+bias.adjust.prob <- function(fmla,mu0,mu1,p0,link = "ident"){
+  
+  # regress probabilistic phenotype on predictors
+  fitp = gee(fmla,id = seq(1,nrow(data1)), fam = "gaussian", data = data1)
+  
+  # make bias correctioon
+  betastar = fitp$coef/(mu1 - mu0)
+  
+  if (link == "ident"){
+    betastar = betastar
+  } else if (link == "log"){
+    betastar = betastar/p0
+  } else if (link == "logit"){
+    betastar <- betastar/(p0*(1-p0))
+  } else return("unsupported link function")
+  
+  # return association parameters (drop intercept)
+  return(betastar[-1])
+}
 
-6\. Using predicted probabilities from your logistic regression-based phenotype derived in exercise 2, estimate the association between BMI and T2DM. How do your results change if you use the bias correction approach described in lecture vs the uncorrected results?
-```{r, eval = FALSE, echo = TRUE}
-summary(TG)
-summary(BMI)
-group = 1*(BMI > 25)
-group=factor(group,levels=c(0,1), labels=c("<=25",">25"))
-table(group)
-by(TG, group, mean)
-by(TG, group, sd)
-hist(TG)
-hist(BMI)
-boxplot(TG~group,ylab="Triglycerides (mg/dl)")
-plot(TG ~ BMI, xlab = "BMI (kg/m2)", ylab = "Triglycerides (mg/dl)")
+# use validation data to compute mean phenotype probability among true cases and controls
+mu0 <- mean(inv.logit(data1$T2DMglm[data1$T2DMv == 0 & !is.na(data1$T2DMv)]))
+mu1 <- mean(inv.logit(data1$T2DMglm[data1$T2DMv == 1 & !is.na(data1$T2DMv)]))
+
+# use mean of predicted probabilities to estimate prevalence
+p0 <- mean(inv.logit(data1$T2DMglm),na.rm = T)
+
+# fit model
+fmla.prob <- formula("prob ~ agemean + factor(race) + gender + endo")
+data1$prob <- inv.logit(data1$T2DMglm)
+mod.prob <- bias.adjust.prob(fmla.prob, mu0, mu1, p0, link = "logit")
+mod.prob
+
+# unadjusted model for comparison
+mod.prob.unadj <- glm(fmla.prob, data = data1, family = "binomial")
+mod.prob.unadj$coef
 ```
