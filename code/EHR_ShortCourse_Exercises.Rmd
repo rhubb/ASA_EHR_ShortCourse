@@ -114,7 +114,7 @@ library(gee)
 ```
 
 ### Exercises
-1\. **Data Quality Evaluation** The first task in analysis of EHR data is data exploration and visualization to identify and resolve data errors. Using the measures data sets, we will carry out a descriptive analysis. Are there any observations that seem likely to be errors? What are some techniques we can use to identify errors? How should we handle erroneous data points once they have been identified?
+1\. **Data Quality Evaluation.** The first task in analysis of EHR data is data exploration and visualization to identify and resolve data errors. Using the measures data set, we will carry out a descriptive analysis. Are there any observations that seem likely to be errors? What are some techniques we can use to identify errors? How should we handle erroneous data points once they have been identified?
 ```{r, eval = TRUE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
 summary(measures)
 
@@ -177,7 +177,7 @@ height.lm <- t(sapply(height.s,longrate))
 height.decrease.ind <- which(height.lm[,1] < -1)     
 par(mfrow = c(3,3))
 for (i in 1:9){
-  plot(as.numeric(as.Date(height.s[[height.decrease.ind[i]]][,1])),height.s[[height.decrease.ind[i]]][,2])
+  plot(as.numeric(as.Date(height.s[[height.decrease.ind[i]]][,1])),height.s[[height.decrease.ind[i]]][,2], xlab = "date", ylab = "height")
 }
 
 # a few of these measures look very suspicious, as if one measurement is about 2.5 times the other
@@ -208,17 +208,17 @@ plot(bmi$weight,bmi$bmi)
 
 ```
 
-2\. **Phenotype Extraction** We will next explore a few alternative approaches to deriving a type 2 diabetes (T2DM) phenotype from this data set. To do so, we first need to reduce the data to one observation per patient considering what data elements might be of use at the patient-level. Next we will use the validation data to develop a prediction model for T2DM using logistic regression and CART. Finally, we will apply the eMERGE T2DM rule to these data. How do the sensitivity, specificity, PPV, and NPV of these approaches compare?
+2\. **Phenotype Extraction.** We will next explore a few alternative approaches to deriving a type 2 diabetes (T2DM) phenotype from this data set. To do so, we first need to reduce the data to one observation per patient considering what data elements might be of use at the patient-level. Next we will use the validation data to develop a prediction model for T2DM using logistic regression and CART. Finally, we will apply the eMERGE T2DM rule to these data. How do the sensitivity, specificity, PPV, and NPV of these approaches compare?
 ```{r, eval = TRUE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
-# for simplicity we will aggregate numeric measurements to the earlist, mean and maximum within this timeperiod
+# for simplicity we will aggregate numeric measurements to the earliest, mean and maximum within this timeperiod
 bmi$bmimean <- unsplit(sapply(split(bmi$bmi,bmi$patientid.x),mean,na.rm = T),bmi$patientid.x)
 bmi$bmimax <- unsplit(sapply(split(bmi$bmi,bmi$patientid.x),max,na.rm = T),bmi$patientid.x)
 bmi$firstbmi <- unsplit(sapply(split(bmi$bmi,bmi$patientid.x),function(x){x[1]}),bmi$patientid.x)
 
 glucose$glucosemean <- unsplit(sapply(split(glucose$glucose,glucose$patientid),mean,na.rm = T),glucose$patientid)
-hba1c$hba1cmean <- unsplit(sapply(split(hba1c$hba1c,hba1c$patientid),mean,na.rm = T),hba1c$patientid)
-bmi$bmimax <- unsplit(sapply(split(bmi$bmi,bmi$patientid.x),max,na.rm = T),bmi$patientid.x)
 glucose$glucosemax <- unsplit(sapply(split(glucose$glucose,glucose$patientid),max,na.rm = T),glucose$patientid)
+
+hba1c$hba1cmean <- unsplit(sapply(split(hba1c$hba1c,hba1c$patientid),mean,na.rm = T),hba1c$patientid)
 hba1c$hba1cmax <- unsplit(sapply(split(hba1c$hba1c,hba1c$patientid),max,na.rm = T),hba1c$patientid)
 
 # look for any occurence of diabetes diagnosis codes, insulin, metformin,
@@ -281,7 +281,7 @@ data1$anymetformin <- ifelse(is.na(data1$anymetformin),FALSE,data1$anymetformin)
 # Use gold standard labels from validation data set to construct prediction models for T2DM
 
 # Logistic regression
-mod.glm <- glm(T2DMv ~ agemean + factor(race) + factor(gender) + T2DM + T1DM + endo + bmimean + anyglucose + anyhba1c, data = data1, family = "binomial")
+mod.glm <- glm(T2DMv ~ agemean + factor(race) + factor(gender) + T2DM + T1DM  + bmimean + anyglucose + anyhba1c, data = data1, family = "binomial")
 
 data1$T2DMglm <- predict(mod.glm, newdata = data1)
 
@@ -293,6 +293,7 @@ print("Logistic regression AUC")
 perf.glm$auc
 
 # CART
+set.seed(20190910)
 mod.cart <- rpart(T2DMv ~ agemean + factor(race) + factor(gender) + T2DM + T1DM + bmimean + anyglucose + anyhba1c + glucosemean + hba1cmean, data = data1, method = "class")
 mod.pruned<- prune(mod.cart, cp= mod.cart$cptable[which.min(mod.cart$cptable[,"xerror"]),"CP"])
 plot(mod.pruned)
@@ -365,7 +366,7 @@ print("eMERGE NPV")
 mean(data1$T2DMv[data1$T2DMemerge == 1 ],na.rm = T)
 ```
 
-3\. ** Missing Data** Next we will explore missing data in an EHR-derived data set. Suppose we want to use our T2DM phenotype from exercise 2 to explore the relationship between hemoglobin A1c and T2DM diagnosis. How might we define HbA1c? Using this definition, how much missingness is there? Is missingness related to any other factors in the data set? Use IPW with a single module or multiple modules to account for missingness in your analysis of the association between BMI and T2DM. 
+3\. **Missing Data.** Next we will explore missing data in an EHR-derived data set. Suppose we want to use our T2DM phenotype from exercise 2 to explore the relationship between hemoglobin A1c and T2DM diagnosis. How might we define HbA1c? Using this definition, how much missingness is there? Is missingness related to any other factors in the data set? Use IPW with a single module or multiple modules to account for missingness in your analysis of the association between BMI and T2DM. 
 ```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
 
 ## There are many ways to quantify HbA1c including HbA1c at a specified age. We will use the mean HbA1c
@@ -380,7 +381,7 @@ mean(is.na(data1$hba1cmean))
 
 ```
 
-4\. **Confounding by Utilization** Accounting for the intensity of healthcare utilization in analyses. How much variability is there in the intensity of utilization in this data set? Use a measure of intensity of utilization to account for informative observation in an analysis of the association between BMI and T2DM.
+4\. **Confounding by Utilization Intensity.** Accounting for the intensity of healthcare utilization in analyses. How much variability is there in the intensity of utilization in this data set? Use a measure of intensity of utilization to account for informative observation in an analysis of the association between BMI and T2DM.
 ```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
 ## Number of encounters per patient
 encounter$numvisit <- unsplit(sapply(split(encounter$servicedate,encounter$patientid),function(x){
@@ -392,12 +393,12 @@ numvisit <- encounter[!duplicated(encounter$patientid),c("patientid","numvisit")
 data1 <- merge(data1,numvisit)
 
 ## Analyze association between BMI and T2DM with and without conditioning on visit intensity
-bmi.glm1 <- glm(T2DMv ~ bmimean, data = data1, family = "binomial")
-bmi.glm2 <- glm(T2DMv ~ bmimean + numvisit, data = data1, family = "binomial")
+bmi.glm1 <- glm(T2DMemerge ~ bmimean, data = data1, family = "binomial")
+bmi.glm2 <- glm(T2DMcart.class ~ bmimean + numvisit, data = data1, family = "binomial")
 
 ```
 
-5\. **Outcome Misclassification** Use the classic Magder and Hughes approach to accounting for outcome misclassification to account for phenotyping error in an analysis of the association between making an endocrinologist visit and T2DM using the CART-derived T2DM phenotype.
+5\. **Outcome Misclassification.** Use the classic Magder and Hughes approach to accounting for outcome misclassification to account for phenotyping error in an analysis of the association between making an endocrinologist visit and T2DM using the CART-derived T2DM phenotype.
 ```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
 ## Analysis without additional adjustment variables
 sens <- mean(as.numeric(as.character(data1$T2DMcart.class[data1$T2DMv == 1 & !is.na(data1$T2DMv)])))
@@ -409,6 +410,12 @@ c <- sum(data1$T2DMcart.class == 1 & data1$endo == 0)
 d <- sum(data1$T2DMcart.class == 0 & data1$endo == 0)
 or.std <- a*d/(b*c)
 or.mh <- (a/(a+b)-(1-spec))/(c/(c+d)-(1-spec))*(sens-c/(c+d))/(sens-a/(a+b))
+
+# Naive OR
+or.std
+
+# Magder and Hughes adjusted OR
+or.mh
 
 ## Adjusted analysis via logistic regression using EM algorithm
 
@@ -442,12 +449,16 @@ mh.EM <- function(fmla, sens, spec, tol = 10^-4, maxit = 10){
 }
 
 # fit model
-fmla.endo <- formula("Y ~ agemean + factor(race) + gender + endo")
+fmla.endo <- formula("Y ~ agemean + factor(race) + gender +  bmimean + endo")
 mod.MH <- mh.EM(fmla.endo, sens, spec, maxit = 40)
 summary(mod.MH)
+
+# naive model for comparison
+mod.cart <- glm(T2DMcart.class ~ agemean + factor(race) + gender + bmimean + endo, data = data1, family = "binomial")
+
 ```
 
-6\. **Using Probabilistic Phenotypes** Using predicted probabilities from your logistic regression-based phenotype derived in exercise 2, estimate the association between making a visit to the endocrinologist and T2DM. How do your results change if you use the bias correction approach described in lecture vs the uncorrected results?
+6\. **Using Probabilistic Phenotypes.** Using predicted probabilities from your logistic regression-based phenotype derived in exercise 2, estimate the association between making a visit to the endocrinologist and T2DM. How do your results change if you use the bias correction approach described in lecture vs the uncorrected results?
 ```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
 # Function for bias correction with known values for mu0 and mu1
 # link can take values "ident", "log", or "logistic"
