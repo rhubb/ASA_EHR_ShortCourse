@@ -384,8 +384,7 @@ mean(is.na(data1$hba1cmean))
 4\. **Confounding by Utilization Intensity.** Accounting for the intensity of healthcare utilization in analyses. How much variability is there in the intensity of utilization in this data set? Use a measure of intensity of utilization to account for informative observation in an analysis of the association between BMI and T2DM.
 ```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
 ## Number of encounters per patient
-encounter$numvisit <- unsplit(sapply(split(encounter$servicedate,encounter$patientid),function(x){
-  length(x)}),encounter$patientid)
+encounter$numvisit <- rep(c(table(encounter$patientid.x)), times = c(table(encounter$patientid.x)))
 summary(encounter$numvisit)
 
 ## Merge number of encounters onto data set with one observation per patient
@@ -394,7 +393,7 @@ data1 <- merge(data1,numvisit)
 
 ## Analyze association between BMI and T2DM with and without conditioning on visit intensity
 bmi.glm1 <- glm(T2DMemerge ~ bmimean, data = data1, family = "binomial")
-bmi.glm2 <- glm(T2DMcart.class ~ bmimean + numvisit, data = data1, family = "binomial")
+bmi.glm2 <- glm(T2DMemerge ~ bmimean + numvisit, data = data1, family = "binomial")
 
 ```
 
