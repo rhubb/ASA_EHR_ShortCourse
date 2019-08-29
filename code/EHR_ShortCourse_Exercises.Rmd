@@ -11,15 +11,12 @@ output:
 ```{r set-options, echo=FALSE, cache=FALSE}
 options(width = 400)
 ## To do:
+## Fix probabilistic phenotypes example
 ## Add codes of interest to data set documentation at top
 ## Add better comments and clean up code
 ## Add IPW missing data example
 ## Take a look at Goldstein paper on conditioning on utilization and improve BMI example
 ## Create versions of output with and without code and results
-##
-## Changes to dataset:
-## NEED TO MODIFY DATA SET TO BUILD IN ASSOCIATION BETWEEN BMI AND INTENSITY
-## BUILD IN STRONGER ASSOCIATION BETWEEN ENDOCRINOLOGIST VISIT AND T2DM
 ```  
 
 ***
@@ -485,7 +482,7 @@ exp(mod.valid$coef)
 bias.adjust.prob <- function(fmla,mu0,mu1,p0,link = "ident"){
   
   # regress probabilistic phenotype on predictors
-  fitp = gee(fmla,id = seq(1,nrow(data1)), fam = "gaussian", data = data1)
+  fitp = suppressMessages(gee(fmla,id = seq(1,nrow(data1)), fam = "gaussian", data = data1))
   
   # make bias correctioon
   betastar = fitp$coef/(mu1 - mu0)
