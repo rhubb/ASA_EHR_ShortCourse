@@ -10,6 +10,13 @@ output:
 
 ```{r set-options, echo=FALSE, cache=FALSE}
 options(width = 400)
+## To do:
+## Add codes of interest to data set documentation at top
+## Add better comments and clean up code
+## Add IPW missing data example
+## Take a look at Goldstein paper on conditioning on utilization and improve BMI example
+## Create versions of output with and without code and results
+##
 ## Changes to dataset:
 ## NEED TO MODIFY DATA SET TO BUILD IN ASSOCIATION BETWEEN BMI AND INTENSITY
 ## BUILD IN STRONGER ASSOCIATION BETWEEN ENDOCRINOLOGIST VISIT AND T2DM
@@ -115,7 +122,7 @@ library(gee)
 
 ### Exercises
 1\. **Data Quality Evaluation.** The first task in analysis of EHR data is data exploration and visualization to identify and resolve data errors. Using the measures data set, we will carry out a descriptive analysis. Are there any observations that seem likely to be errors? What are some techniques we can use to identify errors? How should we handle erroneous data points once they have been identified?
-```{r, eval = TRUE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
+```{r, eval = TRUE, echo = TRUE, cache = FALSE, cache.lazy = FALSE}
 summary(measures)
 
 # separate variables by measurement type
@@ -209,7 +216,7 @@ plot(bmi$weight,bmi$bmi)
 ```
 
 2\. **Phenotype Extraction.** We will next explore a few alternative approaches to deriving a type 2 diabetes (T2DM) phenotype from this data set. To do so, we first need to reduce the data to one observation per patient considering what data elements might be of use at the patient-level. Next we will use the validation data to develop a prediction model for T2DM using logistic regression and CART. Finally, we will apply the eMERGE T2DM rule to these data. How do the sensitivity, specificity, PPV, and NPV of these approaches compare?
-```{r, eval = TRUE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
+```{r, eval = TRUE, echo = TRUE, cache = FALSE, cache.lazy = FALSE}
 # for simplicity we will aggregate numeric measurements to the earliest, mean and maximum within this timeperiod
 bmi$bmimean <- unsplit(sapply(split(bmi$bmi,bmi$patientid.x),mean,na.rm = T),bmi$patientid.x)
 bmi$bmimax <- unsplit(sapply(split(bmi$bmi,bmi$patientid.x),max,na.rm = T),bmi$patientid.x)
@@ -393,20 +400,26 @@ data1 <- merge(data1,numvisit)
 
 ## Analyze association between BMI and T2DM with and without conditioning on visit intensity
 bmi.glm1 <- glm(T2DMemerge ~ bmimean, data = data1, family = "binomial")
-bmi.glm2 <- glm(T2DMemerge ~ bmimean + numvisit, data = data1, family = "binomial")
+summary(bmi.glm1)
 
+bmi.glm2 <- glm(T2DMemerge ~ bmimean + numvisit, data = data1, family = "binomial")
+summary(bmi.glm2)
 ```
 
 5\. **Outcome Misclassification.** Use the classic Magder and Hughes approach to accounting for outcome misclassification to account for phenotyping error in an analysis of the association between making an endocrinologist visit and T2DM using the CART-derived T2DM phenotype.
-```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
+```{r, eval = TRUE, echo = TRUE, cache = FALSE, cache.lazy = FALSE}
 ## Analysis without additional adjustment variables
 sens <- mean(as.numeric(as.character(data1$T2DMcart.class[data1$T2DMv == 1 & !is.na(data1$T2DMv)])))
+sens
+
 spec <- 1-mean(as.numeric(as.character(data1$T2DMcart.class[data1$T2DMv == 0 & !is.na(data1$T2DMv)])))
+spec
 
 a <- sum(data1$T2DMcart.class == 1 & data1$endo == 1)
 b <- sum(data1$T2DMcart.class == 0 & data1$endo == 1)
 c <- sum(data1$T2DMcart.class == 1 & data1$endo == 0)
 d <- sum(data1$T2DMcart.class == 0 & data1$endo == 0)
+
 or.std <- a*d/(b*c)
 or.mh <- (a/(a+b)-(1-spec))/(c/(c+d)-(1-spec))*(sens-c/(c+d))/(sens-a/(a+b))
 
@@ -438,7 +451,6 @@ mh.EM <- function(fmla, sens, spec, tol = 10^-4, maxit = 10){
     data2$w <- c(w,1-w)
     data2$Y <- c(rep(1,nrow(data1)),rep(0,nrow(data1)))
     suppressWarnings(or2 <- glm(fmla, data = data2, family = "binomial", weights = w))
-    print(or2$coef)
     p0 <- predict(or2, type = "response", newdata = data1)
     dif <- max(abs(or1$coef-or2$coef))
     or1 <- or2
@@ -452,18 +464,22 @@ mh.EM <- function(fmla, sens, spec, tol = 10^-4, maxit = 10){
 fmla.endo <- formula("Y ~ agemean + factor(race) + gender + endo")
 mod.MH <- mh.EM(fmla.endo, sens, spec, maxit = 100)
 summary(mod.MH)
+exp(mod.MH$coef)
 
 # naive model for comparison
 mod.cart <- glm(T2DMcart.class ~ agemean + factor(race) + gender + endo, data = data1, family = "binomial")
 summary(mod.cart)
+exp(mod.cart$coef)
 
 # model based on validation data only
 mod.valid <- glm(T2DMv ~ agemean + factor(race) + gender + endo, data = data1, family = "binomial")
 summary(mod.valid)
+exp(mod.valid$coef)
+
 ```
 
 6\. **Using Probabilistic Phenotypes.** Using predicted probabilities from your logistic regression-based phenotype derived in exercise 2, estimate the association between making a visit to the endocrinologist and T2DM. How do your results change if you use the bias correction approach described in lecture vs the uncorrected results?
-```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
+```{r, eval = TRUE, echo = TRUE, cache = FALSE, cache.lazy = FALSE}
 # Function for bias correction with known values for mu0 and mu1
 # link can take values "ident", "log", or "logistic"
 bias.adjust.prob <- function(fmla,mu0,mu1,p0,link = "ident"){
