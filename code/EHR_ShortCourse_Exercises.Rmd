@@ -174,15 +174,15 @@ longrate <- function(x){
 height.lm <- t(sapply(height.s,longrate))
 
 # take a look at a few patients with implausible trajectories
-height.decrease.ind <- which(height.lm[,1] < -1)     
-par(mfrow = c(3,3))
-for (i in 1:9){
+height.decrease.ind <- which(height.lm[,1] < -0.5)     
+par(mfrow = c(2,3))
+for (i in 1:6){
   plot(as.numeric(as.Date(height.s[[height.decrease.ind[i]]][,1])),height.s[[height.decrease.ind[i]]][,2], xlab = "date", ylab = "height")
 }
 
 # a few of these measures look very suspicious, as if one measurement is about 2.5 times the other
 # take a closer look at an example case
-height[height$patientid == names(height.decrease.ind[3]),]
+height[height$patientid == names(height.decrease.ind[1]),]
 
 # could also look at adjacent pairs of measures to look for implausible sequential changes
 
@@ -281,7 +281,7 @@ data1$anymetformin <- ifelse(is.na(data1$anymetformin),FALSE,data1$anymetformin)
 # Use gold standard labels from validation data set to construct prediction models for T2DM
 
 # Logistic regression
-mod.glm <- glm(T2DMv ~ agemean + factor(race) + factor(gender) + T2DM + T1DM  + bmimean + anyglucose + anyhba1c, data = data1, family = "binomial")
+mod.glm <- glm(T2DMv ~ T2DM + T1DM + bmimean + anyglucose + anyhba1c, data = data1, family = "binomial")
 
 data1$T2DMglm <- predict(mod.glm, newdata = data1)
 
@@ -293,8 +293,8 @@ print("Logistic regression AUC")
 perf.glm$auc
 
 # CART
-set.seed(20190910)
-mod.cart <- rpart(T2DMv ~ agemean + factor(race) + factor(gender) + T2DM + T1DM + bmimean + anyglucose + anyhba1c + glucosemean + hba1cmean, data = data1, method = "class")
+set.seed(201909)
+mod.cart <- rpart(T2DMv ~ T2DM + T1DM + anyglucose + anyhba1c + bmimean + glucosemean + hba1cmean, data = data1, method = "class")
 mod.pruned<- prune(mod.cart, cp= mod.cart$cptable[which.min(mod.cart$cptable[,"xerror"]),"CP"])
 plot(mod.pruned)
 text(mod.pruned)
@@ -384,7 +384,7 @@ mean(is.na(data1$hba1cmean))
 4\. **Confounding by Utilization Intensity.** Accounting for the intensity of healthcare utilization in analyses. How much variability is there in the intensity of utilization in this data set? Use a measure of intensity of utilization to account for informative observation in an analysis of the association between BMI and T2DM.
 ```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
 ## Number of encounters per patient
-encounter$numvisit <- rep(c(table(encounter$patientid.x)), times = c(table(encounter$patientid.x)))
+encounter$numvisit <- rep(c(table(encounter$patientid)), times = c(table(encounter$patientid)))
 summary(encounter$numvisit)
 
 ## Merge number of encounters onto data set with one observation per patient
@@ -438,7 +438,8 @@ mh.EM <- function(fmla, sens, spec, tol = 10^-4, maxit = 10){
     data2$w <- c(w,1-w)
     data2$Y <- c(rep(1,nrow(data1)),rep(0,nrow(data1)))
     suppressWarnings(or2 <- glm(fmla, data = data2, family = "binomial", weights = w))
-    p0 <- predict(or2, type = "response")
+    print(or2$coef)
+    p0 <- predict(or2, type = "response", newdata = data1)
     dif <- max(abs(or1$coef-or2$coef))
     or1 <- or2
     j <- j+1
@@ -448,13 +449,17 @@ mh.EM <- function(fmla, sens, spec, tol = 10^-4, maxit = 10){
 }
 
 # fit model
-fmla.endo <- formula("Y ~ agemean + factor(race) + gender +  bmimean + endo")
-mod.MH <- mh.EM(fmla.endo, sens, spec, maxit = 40)
+fmla.endo <- formula("Y ~ agemean + factor(race) + gender + endo")
+mod.MH <- mh.EM(fmla.endo, sens, spec, maxit = 100)
 summary(mod.MH)
 
 # naive model for comparison
-mod.cart <- glm(T2DMcart.class ~ agemean + factor(race) + gender + bmimean + endo, data = data1, family = "binomial")
+mod.cart <- glm(T2DMcart.class ~ agemean + factor(race) + gender + endo, data = data1, family = "binomial")
+summary(mod.cart)
 
+# model based on validation data only
+mod.valid <- glm(T2DMv ~ agemean + factor(race) + gender + endo, data = data1, family = "binomial")
+summary(mod.valid)
 ```
 
 6\. **Using Probabilistic Phenotypes.** Using predicted probabilities from your logistic regression-based phenotype derived in exercise 2, estimate the association between making a visit to the endocrinologist and T2DM. How do your results change if you use the bias correction approach described in lecture vs the uncorrected results?
@@ -482,8 +487,8 @@ bias.adjust.prob <- function(fmla,mu0,mu1,p0,link = "ident"){
 }
 
 # use validation data to compute mean phenotype probability among true cases and controls
-mu0 <- mean(inv.logit(data1$T2DMglm[data1$T2DMv == 0 & !is.na(data1$T2DMv)]))
-mu1 <- mean(inv.logit(data1$T2DMglm[data1$T2DMv == 1 & !is.na(data1$T2DMv)]))
+mu0 <- mean(inv.logit(data1$T2DMglm[data1$T2DMv == 0 & !is.na(data1$T2DMv)]),na.rm = T)
+mu1 <- mean(inv.logit(data1$T2DMglm[data1$T2DMv == 1 & !is.na(data1$T2DMv)]), na.rm = T)
 
 # use mean of predicted probabilities to estimate prevalence
 p0 <- mean(inv.logit(data1$T2DMglm),na.rm = T)
@@ -494,7 +499,4 @@ data1$prob <- inv.logit(data1$T2DMglm)
 mod.prob <- bias.adjust.prob(fmla.prob, mu0, mu1, p0, link = "logit")
 mod.prob
 
-# unadjusted model for comparison
-mod.prob.unadj <- glm(fmla.prob, data = data1, family = "binomial")
-mod.prob.unadj$coef
 ```
