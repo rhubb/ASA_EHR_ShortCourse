@@ -291,6 +291,9 @@ encounter$T1DM <- unsplit(sapply(split(encounter$diag,encounter$patientid),anyco
 # any visit to an endocrinologist
 encounter$endo <- unsplit(sapply(split(encounter$prov,encounter$patientid),anycode,code = "46"),encounter$patientid)
 
+# any depression diagnosis
+encounter$dep <- unsplit(sapply(split(encounter$diag,encounter$patientid),anycode,code = c("296.2","296.9","296.3","300.4","F32.9","F41.8","F33.9")),encounter$patientid)
+
 # any insulin prescription
 meds$anyinsulin <- unsplit(sapply(split(meds$drug,meds$patientid),anycode,code = "insulin"),meds$patientid)
 
@@ -304,7 +307,7 @@ meds$metforminfirst <- unsplit(sapply(split(data.frame(dates=meds$presdate,drugs
 
 ## Create merged dataset with one observation per patient and aggregate variables
 
-encounter1 <- encounter[!duplicated(encounter$patientid),c("patientid","agemean","race","gender","T2DM","T1DM","endo","T2DMnum")]
+encounter1 <- encounter[!duplicated(encounter$patientid),c("patientid","agemean","race","gender","T2DM","T1DM","endo","T2DMnum","dep")]
 bmi1 <- bmi[!duplicated(bmi$patientid.x),c("patientid.x","bmimean","bmimax","firstbmi")]
 names(bmi1) <- c("patientid","bmimean","bmimax","firstbmi")
 glucose1 <- glucose[!duplicated(glucose$patientid),c("patientid","glucosemean","glucosemax")]
@@ -345,8 +348,8 @@ perf.glm$auc
 
 ## CART
 
-set.seed(20190901)
-mod.cart <- rpart(T2DMv ~ T2DM + T1DM  + anyglucose + anyhba1c, data = data1, method = "class")
+set.seed(20190802)
+mod.cart <- rpart(T2DMv ~ T2DM + T1DM  + bmimean + anyglucose + anyhba1c, data = data1, method = "class")
 mod.pruned<- prune(mod.cart, cp= mod.cart$cptable[which.min(mod.cart$cptable[,"xerror"]),"CP"])
 
 plot(mod.pruned)
@@ -470,10 +473,10 @@ sens
 spec <- 1-mean(as.numeric(as.character(data1$T2DMcart.class[data1$T2DMv == 0 & !is.na(data1$T2DMv)])))
 spec
 
-a <- sum(data1$T2DMcart.class == 1 & data1$endo == 1)
-b <- sum(data1$T2DMcart.class == 0 & data1$endo == 1)
-c <- sum(data1$T2DMcart.class == 1 & data1$endo == 0)
-d <- sum(data1$T2DMcart.class == 0 & data1$endo == 0)
+a <- sum(data1$T2DMcart.class == 1 & data1$dep == 1)
+b <- sum(data1$T2DMcart.class == 0 & data1$dep == 1)
+c <- sum(data1$T2DMcart.class == 1 & data1$dep == 0)
+d <- sum(data1$T2DMcart.class == 0 & data1$dep == 0)
 
 or.std <- a*d/(b*c)
 or.mh <- (a/(a+b)-(1-spec))/(c/(c+d)-(1-spec))*(sens-c/(c+d))/(sens-a/(a+b))
@@ -516,18 +519,18 @@ mh.EM <- function(fmla, sens, spec, tol = 10^-4, maxit = 10){
 }
 
 # fit model
-fmla.endo <- formula("Y ~ agemean + factor(race) + gender + endo")
+fmla.endo <- formula("Y ~ agemean + factor(race) + gender + dep")
 mod.MH <- mh.EM(fmla.endo, sens, spec, maxit = 100)
 summary(mod.MH)
 exp(mod.MH$coef)
 
 # naive model for comparison
-mod.cart <- glm(T2DMcart.class ~ agemean + factor(race) + gender + endo, data = data1, family = "binomial")
+mod.cart <- glm(T2DMcart.class ~ agemean + factor(race) + gender + dep, data = data1, family = "binomial")
 summary(mod.cart)
 exp(mod.cart$coef)
 
 # model based on validation data only
-mod.valid <- glm(T2DMv ~ agemean + factor(race) + gender + endo, data = data1, family = "binomial")
+mod.valid <- glm(T2DMv ~ agemean + factor(race) + gender + dep, data = data1, family = "binomial")
 summary(mod.valid)
 exp(mod.valid$coef)
 
