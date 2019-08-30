@@ -560,18 +560,19 @@ mh.EM <- function(fmla, sens, spec, tol = 10^-4, maxit = 10){
 fmla.endo <- formula("Y ~ firstage + factor(race) + gender + dep")
 mod.MH <- mh.EM(fmla.endo, sens, spec, maxit = 100)
 summary(mod.MH)
-exp(mod.MH$coef)
 
 # naive model for comparison
 mod.cart <- glm(T2DMcart.class ~ firstage + factor(race) + gender + dep, data = data1, family = "binomial")
 summary(mod.cart)
-exp(mod.cart$coef)
+
 
 # model based on validation data only
 mod.valid <- glm(T2DMv ~ agemean + factor(race) + gender + dep, data = data1, family = "binomial")
 summary(mod.valid)
-exp(mod.valid$coef)
 
+
+# Compare odds ratios from all three models
+data.frame(MH = exp(mod.MH$coef), Naive = exp(mod.cart$coef), Validation = exp(mod.valid$coef))
 ```
 
 6\. **Using Probabilistic Phenotypes.** Using predicted probabilities from your logistic regression-based phenotype derived in exercise 2, estimate the association between having a depression diagnosis code and T2DM. How do your results change if you use the bias correction approach described in lecture vs the uncorrected results?
@@ -612,5 +613,9 @@ fmla.prob <- formula("prob ~ firstage + factor(race) + gender + dep")
 
 mod.prob <- bias.adjust.prob(fmla.prob, mu0, mu1, p0, link = "logit")
 exp(mod.prob)
+
+# compare with results using validation data
+
+data.frame(Adj = exp(mod.prob), Validation = exp(mod.valid$coef)[-1])
 
 ```
