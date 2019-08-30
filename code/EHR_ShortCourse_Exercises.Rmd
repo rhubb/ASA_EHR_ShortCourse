@@ -364,6 +364,7 @@ data1$T2DMcart.class <- as.numeric(as.character(predict(mod.pruned, newdata = da
 pred.cart <- na.omit(data.frame(pred = data1$T2DMcart[,2],true = data1$T2DMv))
 perf.cart <- roc(pred.cart$true, pred.cart$pred, auc = TRUE, print.auc = TRUE, show.thres = TRUE)
 
+par(xpd = FALSE)
 plot(perf.cart)
 
 # CART AUC
@@ -567,7 +568,7 @@ summary(mod.cart)
 
 
 # model based on validation data only
-mod.valid <- glm(T2DMv ~ agemean + factor(race) + gender + dep, data = data1, family = "binomial")
+mod.valid <- glm(T2DMv ~ firstage + factor(race) + gender + dep, data = data1, family = "binomial")
 summary(mod.valid)
 
 
@@ -612,10 +613,8 @@ p0 <- mean(inv.logit(data1$T2DMglm),na.rm = T)
 fmla.prob <- formula("prob ~ firstage + factor(race) + gender + dep")
 
 mod.prob <- bias.adjust.prob(fmla.prob, mu0, mu1, p0, link = "logit")
-exp(mod.prob)
 
 # compare with results using validation data
-
 data.frame(Adj = exp(mod.prob), Validation = exp(mod.valid$coef)[-1])
 
 ```
