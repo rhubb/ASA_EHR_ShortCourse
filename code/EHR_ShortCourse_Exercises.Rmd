@@ -11,9 +11,7 @@ output:
 ```{r set-options, echo=FALSE, cache=FALSE}
 options(width = 400)
 ## To do:
-## Fix probabilistic phenotypes example
 ## Add better comments and clean up code
-## Add IPW missing data example -- may need to add an additional variable to data set like BP or cholesterol
 ## Take a look at Goldstein paper on conditioning on utilization and improve BMI example
 ## Create versions of output with and without code and results
 ```  
@@ -42,7 +40,7 @@ race: Provider-reported patient race
 
 proc:  CPT codes for procedure performed; codes 99211-99215 are for evaluation and management of established patients in an outpatient setting
 
-diag: ICD-9 (on or before 10/31/2015) or ICD-10 (after 10/31/2015) for primary diagnosis; a few diagnosis codes of interest are T2DM ICD-9 = "250.00", T2DM ICD-10 = "E11.9", T1DM ICD-9 = "250.01", T1DM ICD-10 = "E10.9"
+diag: ICD-9 (on or before 10/31/2015) or ICD-10 (after 10/31/2015) for primary diagnosis; a few diagnosis codes of interest are T2DM ICD-9 = "250.00"; T2DM ICD-10 = "E11.9"; T1DM ICD-9 = "250.01"; T1DM ICD-10 = "E10.9"; Depression ICD-9 = "296.2","296.9","296.3","300.4"; Depression ICD-10 = "F32.9","F41.8","F33.9"
 
 prov: CMS provider specialty code; a few provider codes of potential interest are General Practice = "1", General Dermatology = "7", Family practice = "8", Internal Medicine = "11", Neurology = "13", Ophthalmology = "18", Psychiatry = "26", Pediatric Medicine = "37", Endocrinology = "46"
 
@@ -247,6 +245,7 @@ chol$cholmean <- unsplit(sapply(split(chol$chol,chol$patientid),mean,na.rm = T),
 chol$cholmax <- unsplit(sapply(split(chol$chol,chol$patientid),max,na.rm = T),chol$patientid)
 
 encounter$agemean <- unsplit(sapply(split(encounter$age,encounter$patientid),mean,na.rm = T),encounter$patientid)
+encounter$firstage <- unsplit(sapply(split(encounter$age,encounter$patientid),min,na.rm = T),encounter$patientid)
 
 # look for any occurence of diabetes diagnosis codes, insulin, metformin,
 # or visit to an endocrinologist within the period of interest
@@ -307,7 +306,7 @@ meds$metforminfirst <- unsplit(sapply(split(data.frame(dates=meds$presdate,drugs
 
 ## Create merged dataset with one observation per patient and aggregate variables
 
-encounter1 <- encounter[!duplicated(encounter$patientid),c("patientid","agemean","race","gender","T2DM","T1DM","endo","T2DMnum","dep")]
+encounter1 <- encounter[!duplicated(encounter$patientid),c("patientid","agemean","firstage","race","gender","T2DM","T1DM","endo","T2DMnum","dep")]
 bmi1 <- bmi[!duplicated(bmi$patientid.x),c("patientid.x","bmimean","bmimax","firstbmi")]
 names(bmi1) <- c("patientid","bmimean","bmimax","firstbmi")
 glucose1 <- glucose[!duplicated(glucose$patientid),c("patientid","glucosemean","glucosemax")]
@@ -316,7 +315,6 @@ chol1 <- chol[!duplicated(chol$patientid),c("patientid","cholmean","cholmax")]
 meds1  <- meds[!duplicated(meds$patientid),c("patientid","anyinsulin","anymetformin","metforminfirst")]
 
 data1 <- Reduce(function(x,y){merge(x,y, all = T)},list(encounter1,bmi1,glucose1,hba1c1,chol1,meds1,validation))
-
 
 # create indicators for availability of any glucose or HbA1c measures
 
@@ -352,6 +350,7 @@ set.seed(20190805)
 mod.cart <- rpart(T2DMv ~ T2DM + T1DM  + bmimean + anyglucose + anyhba1c, data = data1, method = "class")
 mod.pruned<- prune(mod.cart, cp= mod.cart$cptable[which.min(mod.cart$cptable[,"xerror"]),"CP"])
 
+par(xpd = NA) # prevent text labels from being cut off
 plot(mod.pruned)
 text(mod.pruned)
 
@@ -359,7 +358,7 @@ text(mod.pruned)
 data1$T2DMcart <- predict(mod.pruned, newdata = data1, type = "prob")
 
 # binary T2DM phenotype based on CART
-data1$T2DMcart.class <- predict(mod.pruned, newdata = data1, type = "class")
+data1$T2DMcart.class <- as.numeric(as.character(predict(mod.pruned, newdata = data1, type = "class")))
 
 # evaluate performance of continuous CART phenotype
 pred.cart <- na.omit(data.frame(pred = data1$T2DMcart[,2],true = data1$T2DMv))
@@ -434,57 +433,96 @@ mean(data1$T2DMv[data1$T2DMemerge == 1],na.rm = T)
 3\. **Missing Data.** Next we will explore missing data in an EHR-derived data set. Suppose we want to use our T2DM phenotype from exercise 2 to explore the relationship between total cholesterol and T2DM diagnosis. How might we define total cholesterol? Using this definition, how much missingness is there? Is missingness related to any other factors in the data set? Use IPW with a single module or multiple modules to account for missingness in your analysis of the association between total cholesterol and T2DM. 
 ```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
 
-## There are many ways to quantify HbA1c including HbA1c at a specified age. We will use the mean HbA1c
-## across the observations included in the data set. Note that this gives rise to a cross-sectional
-## analysis in which we do not know if elevated HbA1c preceded or followed T2DM diagnosis
+## For most real examples we would want to define our exposure (cholesterol) in a window around
+## cohort entry. For this toy example we will just use all available data. 
 
-# Percent missing HbA1c
-mean(is.na(data1$hba1cmean))
+# Percent missing cholesterol
+mean(is.na(data1$cholmean))
 
-# Look for factors associated with HbA1c
-
-
-```
-
-4\. **Confounding by Utilization Intensity.** Accounting for the intensity of healthcare utilization in analyses. How much variability is there in the intensity of utilization in this data set? Use a measure of intensity of utilization to account for informative observation in an analysis of the association between BMI and T2DM.
-```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
-## Number of encounters per patient
+# Number of encounters per patient
 encounter$numvisit <- rep(c(table(encounter$patientid)), times = c(table(encounter$patientid)))
 summary(encounter$numvisit)
 
-## Merge number of encounters onto data set with one observation per patient
+# Merge number of encounters onto data set with one observation per patient
 numvisit <- encounter[!duplicated(encounter$patientid),c("patientid","numvisit")]
 data1 <- merge(data1,numvisit)
 
-## Analyze association between BMI and T2DM with and without conditioning on visit intensity
-bmi.glm1 <- glm(T2DMemerge ~ bmimean, data = data1, family = "binomial")
-summary(bmi.glm1)
+# Look for factors associated with missing cholesterol
+data1$misschol <- is.na(data1$cholmean)
+misschol.mod <- glm(misschol ~ firstage + race + gender + firstbmi, data = data1, family = binomial)
 
-bmi.glm2 <- glm(T2DMemerge ~ bmimean + numvisit, data = data1, family = "binomial")
-summary(bmi.glm2)
+# Generate probability of missingness from this model
+data1$pmisschol1[!is.na(data1$firstbmi)] <- 1-predict(misschol.mod, type = "response", data = data1)
+
+# Estimate probability of missingness using a two stage model
+# first estimate probability of missingness conditional on making an endocrinologist visit
+misschol.mod.2 <- glm(misschol ~ endo, data = data1, family = binomial)
+data1$pmisschol2 <- 1-predict(misschol.mod.2, type = "response")
+
+# next estimate probability of missingness among those with and without endocrinologist visit
+misschol.mod.20 <- glm(misschol ~ firstage + race + gender + firstbmi, data = data1[data1$endo == 0,], family = binomial)
+misschol.mod.21 <- glm(misschol ~ firstage + race + gender + firstbmi, data = data1[data1$endo == 1,], family = binomial)
+data1$pmisschol20[!is.na(data1$firstbmi)] <- 1-predict(misschol.mod.20, type = "response", newdata = data1[!is.na(data1$firstbmi),])
+data1$pmisschol21[!is.na(data1$firstbmi)] <- 1-predict(misschol.mod.21, type = "response", newdata = data1[!is.na(data1$firstbmi),])
+
+# create combined probability of having an observed cholesterol value given these two modules
+data1$pmisschol.mod <- data1$pmisschol2*data1$pmisschol21+(1-data1$pmisschol2)*data1$pmisschol20
+
+## Compare one module and two module probabilities of being observed
+plot(data1$pmisschol1, data1$pmisschol.mod)
+
+## Fit regression models using IPW to account for missingness in cholesterol
+
+# Model using 1 step weights
+data1$w1 <- 1/data1$pmisschol1
+chol.mod1 <- glm(T2DMcart.class~ firstage + factor(race) + gender + cholmean, data = data1, weights = w1)
+summary(chol.mod1)
+
+# Model using 2 step weights
+data1$w.mod <- 1/data1$pmisschol.mod
+chol.mod2 <- glm(T2DMcart.class~ firstage + factor(race) + gender + cholmean, data = data1, weights = w.mod)
+summary(chol.mod2)
+
 ```
 
-5\. **Outcome Misclassification.** Use the classic Magder and Hughes approach to accounting for outcome misclassification to account for phenotyping error in an analysis of the association between making an endocrinologist visit and T2DM using the CART-derived T2DM phenotype.
+4\. **Confounding by Utilization Intensity.** Accounting for the intensity of healthcare utilization in analyses. How much variability is there in the intensity of utilization in this data set? Use a measure of intensity of utilization to account for informed presence bias in an analysis of the association between depression diagnosis and T2DM.
+```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
+## Summarize intensity of utilization using number of outpatient visits
+hist(data1$numvisit)
+
+## Analyze association between BMI and T2DM with and without conditioning on visit intensity
+dep.glm1 <- glm(T2DMcart.class ~ firstage + factor(race) + gender + dep, data = data1, family = "binomial")
+summary(dep.glm1)
+
+dep.glm2 <- glm(T2DMcart.class ~ firstage + factor(race) + gender + numvisit + dep, data = data1, family = "binomial")
+summary(dep.glm2)
+
+# compare odds ratios before and after adjustment
+cbind(c(exp(dep.glm1$coef),NA),exp(dep.glm2$coef))
+
+```
+
+5\. **Outcome Misclassification.** Use the classic Magder and Hughes approach to accounting for outcome misclassification to account for phenotyping error in an analysis of the association between having a depression diagnosis code and T2DM using the CART-derived T2DM phenotype.
 ```{r, eval = TRUE, echo = TRUE, cache = FALSE, cache.lazy = FALSE}
 ## Analysis without additional adjustment variables
+
+# first compute sensitivity and specificity using validation data
 sens <- mean(as.numeric(as.character(data1$T2DMcart.class[data1$T2DMv == 1 & !is.na(data1$T2DMv)])))
 sens
 
 spec <- 1-mean(as.numeric(as.character(data1$T2DMcart.class[data1$T2DMv == 0 & !is.na(data1$T2DMv)])))
 spec
 
+# compute odds ratios
 a <- sum(data1$T2DMcart.class == 1 & data1$dep == 1)
 b <- sum(data1$T2DMcart.class == 0 & data1$dep == 1)
 c <- sum(data1$T2DMcart.class == 1 & data1$dep == 0)
 d <- sum(data1$T2DMcart.class == 0 & data1$dep == 0)
 
-or.std <- a*d/(b*c)
-or.mh <- (a/(a+b)-(1-spec))/(c/(c+d)-(1-spec))*(sens-c/(c+d))/(sens-a/(a+b))
+or.std <- a*d/(b*c) # standard odds ratio
+or.mh <- (a/(a+b)-(1-spec))/(c/(c+d)-(1-spec))*(sens-c/(c+d))/(sens-a/(a+b)) # Magder and Hughes adjusted odds ratio
 
-# Naive OR
 or.std
-
-# Magder and Hughes adjusted OR
 or.mh
 
 ## Adjusted analysis via logistic regression using EM algorithm
@@ -519,13 +557,13 @@ mh.EM <- function(fmla, sens, spec, tol = 10^-4, maxit = 10){
 }
 
 # fit model
-fmla.endo <- formula("Y ~ agemean + factor(race) + gender + dep")
+fmla.endo <- formula("Y ~ firstage + factor(race) + gender + dep")
 mod.MH <- mh.EM(fmla.endo, sens, spec, maxit = 100)
 summary(mod.MH)
 exp(mod.MH$coef)
 
 # naive model for comparison
-mod.cart <- glm(T2DMcart.class ~ agemean + factor(race) + gender + dep, data = data1, family = "binomial")
+mod.cart <- glm(T2DMcart.class ~ firstage + factor(race) + gender + dep, data = data1, family = "binomial")
 summary(mod.cart)
 exp(mod.cart$coef)
 
@@ -536,7 +574,7 @@ exp(mod.valid$coef)
 
 ```
 
-6\. **Using Probabilistic Phenotypes.** Using predicted probabilities from your logistic regression-based phenotype derived in exercise 2, estimate the association between making a visit to the endocrinologist and T2DM. How do your results change if you use the bias correction approach described in lecture vs the uncorrected results?
+6\. **Using Probabilistic Phenotypes.** Using predicted probabilities from your logistic regression-based phenotype derived in exercise 2, estimate the association between having a depression diagnosis code and T2DM. How do your results change if you use the bias correction approach described in lecture vs the uncorrected results?
 ```{r, eval = TRUE, echo = TRUE, cache = FALSE, cache.lazy = FALSE}
 # Function for bias correction with known values for mu0 and mu1
 # link can take values "ident", "log", or "logistic"
@@ -570,7 +608,7 @@ mu1 <- mean(data1$prob[data1$T2DMv == 1 & !is.na(data1$T2DMv)], na.rm = T)
 p0 <- mean(inv.logit(data1$T2DMglm),na.rm = T)
 
 # fit model
-fmla.prob <- formula("prob ~ agemean + factor(race) + gender + dep")
+fmla.prob <- formula("prob ~ firstage + factor(race) + gender + dep")
 
 mod.prob <- bias.adjust.prob(fmla.prob, mu0, mu1, p0, link = "logit")
 exp(mod.prob)
