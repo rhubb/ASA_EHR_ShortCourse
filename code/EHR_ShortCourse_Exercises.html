@@ -569,8 +569,8 @@ perf.glm<span class="op">$</span>auc</code></pre></div>
 <pre><code>## Area under the curve: 0.8763</code></pre>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">## CART
 
-<span class="kw">set.seed</span>(<span class="dv">20190901</span>)
-mod.cart &lt;-<span class="st"> </span><span class="kw">rpart</span>(T2DMv <span class="op">~</span><span class="st"> </span>T2DM <span class="op">+</span><span class="st"> </span>T1DM  <span class="op">+</span><span class="st"> </span>anyglucose <span class="op">+</span><span class="st"> </span>anyhba1c, <span class="dt">data =</span> data1, <span class="dt">method =</span> <span class="st">&quot;class&quot;</span>)
+<span class="kw">set.seed</span>(<span class="dv">20190802</span>)
+mod.cart &lt;-<span class="st"> </span><span class="kw">rpart</span>(T2DMv <span class="op">~</span><span class="st"> </span>T2DM <span class="op">+</span><span class="st"> </span>T1DM  <span class="op">+</span><span class="st"> </span>bmimean <span class="op">+</span><span class="st"> </span>anyglucose <span class="op">+</span><span class="st"> </span>anyhba1c, <span class="dt">data =</span> data1, <span class="dt">method =</span> <span class="st">&quot;class&quot;</span>)
 mod.pruned&lt;-<span class="st"> </span><span class="kw">prune</span>(mod.cart, <span class="dt">cp=</span> mod.cart<span class="op">$</span>cptable[<span class="kw">which.min</span>(mod.cart<span class="op">$</span>cptable[,<span class="st">&quot;xerror&quot;</span>]),<span class="st">&quot;CP&quot;</span>])
 
 <span class="kw">plot</span>(mod.pruned)
