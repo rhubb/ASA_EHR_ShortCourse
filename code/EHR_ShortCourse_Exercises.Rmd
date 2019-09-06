@@ -22,7 +22,7 @@ options(width = 400)
 
 The goal of these exercises is to explore the structure of an electronic health records (EHR)-derived data set and some of the common challenges encountered in working with healthcare-derived data. We will also practice implementing some statistical methods introduced throughout the short course to address these issues. To do this we will use a synthetic data set simulated to mimic the structure of a real EHR-derived data set. <\bf>Please note that the data we will be working with are simulated and intended for instructional purposes only.<\bf> Real EHR data generally have access restrictions due to privacy/confidentiality issues and HIPAA protections. At the end of the course I will provide links for a few public access repositories that provide real EHR data. However, these generally do require a data use agreement and thus a few steps are involved in getting access.
 
-The synthetic data we will be working with is based on the PEDSnet study of pediatric type 2 diabetes described in class. The data are divided into four files which can be downloaded from GitHub. The four files contain data from 67,355 patients age 10-20 years who had at least one outpatient encounter between 2001 and 2019. The four files can be linked using the variable patientid.
+The synthetic data we will be working with is based on the PEDSnet study of pediatric type 2 diabetes described in class. The data are divided into four files which can be downloaded from GitHub. The four files contain data from 9,930 patients age 10-20 years who had at least one outpatient encounter between 2001 and 2019. The four files can be linked using the variable patientid.
 
 #### Encounter data
 This data set includes one row per outpatient encounter. 
@@ -87,7 +87,7 @@ validation = read.csv("https://raw.githubusercontent.com/rhubb/ASA_EHR_ShortCour
 <blockquote style="font-size:12px">
 patientid:  Patient ID
 
-T2DM: Type 2 diabetes status based on manual chart review (1 = T2DM, 0 = no evidence of T2DM)
+T2DMv: Type 2 diabetes status based on manual chart review (1 = T2DM, 0 = no evidence of T2DM)
 
 </blockquote>
 
@@ -164,7 +164,12 @@ summary(chol$chol)
 # values that are clearly outside the plausible range can be eliminated, those that seem unlikely should be
 # noted for discussion with clinical collaborators
 
+# remove negative weights as clearly lying outside the plausible range
+
 weight$weight <- ifelse(weight$weight < 0, NA, weight$weight)
+
+# identify patients with extreme heights and weights
+
 extreme.heights <- weight$patientid[height$height > 300] # flag patients with height > 3 m
 extreme.weights <- weight$patientid[weight$weight > 200] # flag patients with weight > 200 kg
 
@@ -177,6 +182,7 @@ hba1c.s <- split(data.frame(as.Date(hba1c$servicedate),hba1c$hba1c),hba1c$patien
 
 # summarize rate of change and within-patient variability
 
+# function to estimate rate of change and residual variability for each child's data
 longrate <- function(x){
   days <- as.numeric(as.Date(x[,1]))
   measure <- x[,2]
@@ -208,7 +214,6 @@ weight$iddate <- paste(weight$patientid,weight$servicedate)
 bmi <- merge(height,weight,by = "iddate") # merge height and weight data 
 bmi$bmi <- bmi$weight/(bmi$height/100)^2
 
-par(mfrow = c(2,2))
 hist(bmi$bmi)
 plot(bmi$weight,bmi$bmi)
 plot(bmi$height,bmi$bmi)
