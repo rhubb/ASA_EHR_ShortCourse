@@ -1,4 +1,4 @@
-## R code for Analysis of Big Healthcare Databases
+## R code for Analysis of Big Healthcare Databases exercises
 
 ##-------------------------------------------------------------##
 ## Read in data
