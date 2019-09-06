@@ -95,19 +95,16 @@ T2DMv: Type 2 diabetes status based on manual chart review (1 = T2DM, 0 = no evi
 - For these exercises you will need the _rpart_, _pROC_ _boot_, and _gee_ packages.
 - If you have not already, please install these packages now.
 ```{r, eval=FALSE}
-install.packages("RColorBrewer")
 install.packages("rpart")
 install.packages("pROC")
 install.packages("boot")
 install.packages("gee")
-library(RColorBrewer)
 library(rpart)
 library(pROC)
 library(boot)
 library(gee)
 ```
 ```{r, eval=TRUE, message = FALSE, echo = FALSE}
-library(RColorBrewer)
 library(rpart)
 library(pROC)
 library(boot)
@@ -170,7 +167,7 @@ weight$weight <- ifelse(weight$weight < 0, NA, weight$weight)
 
 # identify patients with extreme heights and weights
 
-extreme.heights <- weight$patientid[height$height > 300] # flag patients with height > 3 m
+extreme.heights <- weight$patientid[height$height < 100] # flag patients with height < 1 m
 extreme.weights <- weight$patientid[weight$weight > 200] # flag patients with weight > 200 kg
 
 # implausible patterns in longitudinal measurements provide an additional means of identifying data errors
@@ -196,16 +193,16 @@ height.lm <- t(sapply(height.s,longrate))
 
 # take a look at a few patients with implausible trajectories
 
-height.decrease.ind <- which(height.lm[,1] < -0.5)     
+height.change.ind <- which(abs(height.lm[,1]) > 0.5)     
 par(mfrow = c(2,3))
 for (i in 1:6){
-  plot(as.numeric(as.Date(height.s[[height.decrease.ind[i]]][,1])),height.s[[height.decrease.ind[i]]][,2], xlab = "date", ylab = "height")
+  plot(as.numeric(as.Date(height.s[[height.change.ind[i]]][,1])),height.s[[height.change.ind[i]]][,2], xlab = "date", ylab = "height", type = "l")
 }
 
 # a few of these measures look very suspicious, as if one measurement is about 2.5 times the other
 # take a closer look at an example case
 
-height[height$patientid == names(height.decrease.ind[1]),]
+height[height$patientid == names(height.change.ind[4]),]
 
 # generate BMI and look for implausible values
 
@@ -214,6 +211,7 @@ weight$iddate <- paste(weight$patientid,weight$servicedate)
 bmi <- merge(height,weight,by = "iddate") # merge height and weight data 
 bmi$bmi <- bmi$weight/(bmi$height/100)^2
 
+par(mfrow = c(2,2))
 hist(bmi$bmi)
 plot(bmi$weight,bmi$bmi)
 plot(bmi$height,bmi$bmi)
@@ -221,12 +219,13 @@ plot(bmi$height,bmi$bmi)
 # unusual groupings in BMI plots suggest patients with wrong units for height or weight
 # select a rule for eliminating these heights or weights
 
-bmi$height <- ifelse(bmi$height > 250, bmi$height/2.54, bmi$height)
+bmi$height <- ifelse(bmi$height < 100 & bmi$bmi > 100, bmi$height*2.54, bmi$height)
 bmi$bmi <- bmi$weight/(bmi$height/100)^2
 
-par(mfrow = c(1,2))
+par(mfrow = c(2,2))
 hist(bmi$bmi)
 plot(bmi$weight,bmi$bmi)
+plot(bmi$height,bmi$bmi)
 
 ```
 
@@ -437,7 +436,7 @@ mean(data1$T2DMv[data1$T2DMemerge == 1],na.rm = T)
 ```
 
 3\. **Missing Data.** Next we will explore missing data in an EHR-derived data set. Suppose we want to use our T2DM phenotype from exercise 2 to explore the relationship between total cholesterol and T2DM diagnosis. How might we define total cholesterol? Using this definition, how much missingness is there? Is missingness related to any other factors in the data set? Use IPW with a single module or multiple modules to account for missingness in your analysis of the association between total cholesterol and T2DM. 
-```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
+```{r, eval = TRUE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
 
 ## For most real examples we would want to define our exposure (cholesterol) in a window around
 ## cohort entry. For this toy example we will just use all available data. 
@@ -447,7 +446,7 @@ mean(is.na(data1$cholmean))
 
 # Number of encounters per patient
 encounter$numvisit <- rep(c(table(encounter$patientid)), times = c(table(encounter$patientid)))
-summary(encounter$numvisit)
+summary(c(table(encounter$patientid)))
 
 # Merge number of encounters onto data set with one observation per patient
 numvisit <- encounter[!duplicated(encounter$patientid),c("patientid","numvisit")]
@@ -456,6 +455,7 @@ data1 <- merge(data1,numvisit)
 # Look for factors associated with missing cholesterol
 data1$misschol <- is.na(data1$cholmean)
 misschol.mod <- glm(misschol ~ firstage + race + gender + firstbmi, data = data1, family = binomial)
+summary(misschol.mod)
 
 # Generate probability of missingness from this model
 data1$pmisschol1[!is.na(data1$firstbmi)] <- 1-predict(misschol.mod, type = "response", data = data1)
@@ -463,11 +463,17 @@ data1$pmisschol1[!is.na(data1$firstbmi)] <- 1-predict(misschol.mod, type = "resp
 # Estimate probability of missingness using a two stage model
 # first estimate probability of missingness conditional on making an endocrinologist visit
 misschol.mod.2 <- glm(misschol ~ endo, data = data1, family = binomial)
+summary(misschol.mod.2)
+
 data1$pmisschol2 <- 1-predict(misschol.mod.2, type = "response")
 
 # next estimate probability of missingness among those with and without endocrinologist visit
 misschol.mod.20 <- glm(misschol ~ firstage + race + gender + firstbmi, data = data1[data1$endo == 0,], family = binomial)
+summary(misschol.mod.20)
+
 misschol.mod.21 <- glm(misschol ~ firstage + race + gender + firstbmi, data = data1[data1$endo == 1,], family = binomial)
+summary(misschol.mod.21)
+
 data1$pmisschol20[!is.na(data1$firstbmi)] <- 1-predict(misschol.mod.20, type = "response", newdata = data1[!is.na(data1$firstbmi),])
 data1$pmisschol21[!is.na(data1$firstbmi)] <- 1-predict(misschol.mod.21, type = "response", newdata = data1[!is.na(data1$firstbmi),])
 
@@ -481,21 +487,20 @@ plot(data1$pmisschol1, data1$pmisschol.mod)
 
 # Model using 1 step weights
 data1$w1 <- 1/data1$pmisschol1
-chol.mod1 <- glm(T2DMcart.class~ firstage + factor(race) + gender + cholmean, data = data1, weights = w1)
+data1$w1 <- sum(!is.na(data1$w1))*data1$w1/sum(data1$w1,na.rm = T) # normalize weights to maintain sample size
+chol.mod1 <- glm(T2DMcart.class~ firstage + factor(race) + gender + cholmean, data = data1, weights = w1, family = "binomial")
 summary(chol.mod1)
 
 # Model using 2 step weights
 data1$w.mod <- 1/data1$pmisschol.mod
-chol.mod2 <- glm(T2DMcart.class~ firstage + factor(race) + gender + cholmean, data = data1, weights = w.mod)
+data1$w.mod <- sum(!is.na(data1$w.mod))*data1$w.mod/sum(data1$w.mod,na.rm = T) # normalize weights to maintain sample size
+chol.mod2 <- glm(T2DMcart.class~ firstage + factor(race) + gender + cholmean, data = data1, weights = w.mod, family = "binomial")
 summary(chol.mod2)
 
 ```
 
 4\. **Confounding by Utilization Intensity.** Accounting for the intensity of healthcare utilization in analyses. How much variability is there in the intensity of utilization in this data set? Use a measure of intensity of utilization to account for informed presence bias in an analysis of the association between depression diagnosis and T2DM.
-```{r, eval = FALSE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
-## Summarize intensity of utilization using number of outpatient visits
-hist(data1$numvisit)
-
+```{r, eval = TRUE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
 ## Analyze association between BMI and T2DM with and without conditioning on visit intensity
 dep.glm1 <- glm(T2DMcart.class ~ firstage + factor(race) + gender + dep, data = data1, family = "binomial")
 summary(dep.glm1)
@@ -563,8 +568,8 @@ mh.EM <- function(fmla, sens, spec, tol = 10^-4, maxit = 10){
 }
 
 # fit model
-fmla.endo <- formula("Y ~ firstage + factor(race) + gender + dep")
-mod.MH <- mh.EM(fmla.endo, sens, spec, maxit = 100)
+fmla.dep <- formula("Y ~ firstage + factor(race) + gender + dep")
+mod.MH <- mh.EM(fmla.dep, sens, spec, maxit = 100)
 summary(mod.MH)
 
 # naive model for comparison
