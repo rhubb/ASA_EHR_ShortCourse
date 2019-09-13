@@ -22,7 +22,7 @@ options(width = 400)
 
 The goal of these exercises is to explore the structure of an electronic health records (EHR)-derived data set and some of the common challenges encountered in working with healthcare-derived data. We will also practice implementing some statistical methods introduced throughout the short course to address these issues. To do this we will use a synthetic data set simulated to mimic the structure of a real EHR-derived data set. **Please note that the data we will be working with are simulated and intended for instructional purposes only.** Real EHR data generally have access restrictions due to privacy/confidentiality issues and HIPAA protections. At the end of the course I will provide links for a few public access repositories that provide real EHR data. However, these generally do require a data use agreement and thus a few steps are involved in getting access.
 
-The synthetic data we will be working with is based on the PEDSnet study of pediatric type 2 diabetes described in class. The data are divided into four files which can be downloaded from GitHub. The four files contain data from 9,930 patients age 10-20 years who had at least one outpatient encounter between 2001 and 2019. The four files can be linked using the variable patientid.
+The synthetic data we will be working with are based on the PEDSnet study of pediatric type 2 diabetes described in class. The data are divided into four files which can be downloaded from GitHub. The four files contain data from 9,930 patients age 10-20 years who had at least one outpatient encounter between 2001 and 2019. The four files can be linked using the variable patientid.
 
 #### Encounter data
 This data set includes one row per outpatient encounter. 
@@ -92,7 +92,7 @@ T2DMv: Type 2 diabetes status based on manual chart review (1 = T2DM, 0 = no evi
 </blockquote>
 
 #### Install R packages
-- For these exercises you will need the _rpart_, _pROC_ _boot_, and _gee_ packages.
+- For these exercises you will need the _rpart_, _pROC_, _boot_, and _gee_ packages.
 - If you have not already, please install these packages now.
 ```{r, eval=FALSE}
 install.packages("rpart")
@@ -117,6 +117,9 @@ library(gee)
 ## Use summary statistics and plots to investigate basic characteristics of the data
 
 summary(measures)
+
+# check types of measures available
+unique(measures$measuretype)
 
 # separate variables by measurement type
 height <- measures[measures$measuretype == "height",-4]
@@ -167,7 +170,7 @@ weight$weight <- ifelse(weight$weight < 0, NA, weight$weight)
 
 # identify patients with extreme heights and weights
 
-extreme.heights <- weight$patientid[height$height < 100] # flag patients with height < 1 m
+extreme.heights <- height$patientid[height$height < 100] # flag patients with height < 1 m
 extreme.weights <- weight$patientid[weight$weight > 200] # flag patients with weight > 200 kg
 
 # implausible patterns in longitudinal measurements provide an additional means of identifying data errors
@@ -501,11 +504,11 @@ summary(chol.mod2)
 
 4\. **Confounding by Utilization Intensity.** Accounting for the intensity of healthcare utilization in analyses. How much variability is there in the intensity of utilization in this data set? Use a measure of intensity of utilization to account for informed presence bias in an analysis of the association between depression diagnosis and T2DM.
 ```{r, eval = TRUE, echo = TRUE, cache = TRUE, cache.lazy = FALSE}
-## Analyze association between BMI and T2DM with and without conditioning on visit intensity
+## Analyze association between depression and T2DM with and without conditioning on visit intensity
 dep.glm1 <- glm(T2DMcart.class ~ firstage + factor(race) + gender + dep, data = data1, family = "binomial")
 summary(dep.glm1)
 
-dep.glm2 <- glm(T2DMcart.class ~ firstage + factor(race) + gender + numvisit + dep, data = data1, family = "binomial")
+dep.glm2 <- glm(T2DMcart.class ~ firstage + factor(race) + gender + dep + numvisit, data = data1, family = "binomial")
 summary(dep.glm2)
 
 # compare odds ratios before and after adjustment
@@ -524,7 +527,7 @@ sens
 spec <- 1-mean(as.numeric(as.character(data1$T2DMcart.class[data1$T2DMv == 0 & !is.na(data1$T2DMv)])))
 spec
 
-# compute odds ratios
+# compute odds ratios based on 2x2 table
 a <- sum(data1$T2DMcart.class == 1 & data1$dep == 1)
 b <- sum(data1$T2DMcart.class == 0 & data1$dep == 1)
 c <- sum(data1$T2DMcart.class == 1 & data1$dep == 0)
