@@ -1,5 +1,5 @@
 ---
-title: "Analysis of Big Healthcare Databases - Exercises"
+title: "Analysis of Big Healthcare Databases - Tutorials"
 output:
   html_document:
     toc: false 
@@ -36,7 +36,7 @@ race: Provider-reported patient race
 
 proc:  CPT codes for procedure performed; codes 99211-99215 are for evaluation and management of established patients in an outpatient setting
 
-diag: ICD-9 (on or before 10/31/2015) or ICD-10 (after 10/31/2015) for primary diagnosis; a few diagnosis codes of interest are T2DM ICD-9 = "250.00"; T2DM ICD-10 = "E11.9"; T1DM ICD-9 = "250.01"; T1DM ICD-10 = "E10.9"; Depression ICD-9 = "296.2","296.9","296.3","300.4"; Depression ICD-10 = "F32.9","F41.8","F33.9"
+diag: ICD-9 (before 10/1/2015) or ICD-10 (on or after 10/1/2015) for primary diagnosis; a few diagnosis codes of interest are T2DM ICD-9 = "250.00"; T2DM ICD-10 = "E11.9"; T1DM ICD-9 = "250.01"; T1DM ICD-10 = "E10.9"; Depression ICD-9 = "296.2","296.9","296.3","300.4"; Depression ICD-10 = "F32.9","F41.8","F33.9"
 
 prov: CMS provider specialty code; a few provider codes of potential interest are General Practice = "1", General Dermatology = "7", Family practice = "8", Internal Medicine = "11", Neurology = "13", Ophthalmology = "18", Psychiatry = "26", Pediatric Medicine = "37", Endocrinology = "46"
 
@@ -107,8 +107,11 @@ library(boot)
 library(gee)
 ```
 
-### Exercises
-1\. **Data Quality Evaluation.** The first task in analysis of EHR data is data exploration and visualization to identify and resolve data errors. Focusing on the measures data set, we will carry out a descriptive analysis. 
+### Tutorials
+
+#### Tutorial 1
+
+A\. **Data Quality Evaluation.** The first task in analysis of EHR data is data exploration and visualization to identify and resolve data errors. Focusing on the measures data set, we will carry out a descriptive analysis. 
 
 * Are there any observations that seem likely to be errors? 
 * What are some techniques we can use to identify errors? 
@@ -232,7 +235,7 @@ plot(bmi$height,bmi$bmi)
 
 ```
 
-2\. **Phenotype Extraction.** We will next explore a few alternative approaches to deriving a type 2 diabetes (T2DM) phenotype from this data set. 
+B\. **Phenotype Extraction.** We will next explore a few alternative approaches to deriving a type 2 diabetes (T2DM) phenotype from this data set. 
 
 * Reduce the data to one observation per patient considering what data elements might be of use at the patient-level. 
 * Use the validation data to develop a prediction model for T2DM using logistic regression and CART. 
@@ -450,7 +453,9 @@ mean(data1$T2DMv[data1$T2DMemerge == 1],na.rm = T)
 1 - mean(data1$T2DMv[data1$T2DMemerge == 0],na.rm = T)
 ```
 
-3\. **Missing Data.** Next we will explore missing data in an EHR-derived data set. Suppose we want to use our T2DM phenotype from exercise 2 to explore the relationship between total cholesterol and T2DM diagnosis. 
+#### Tutorial 2
+
+A\. **Missing Data.** Next we will explore missing data in an EHR-derived data set. Suppose we want to use our T2DM phenotype from exercise 2 to explore the relationship between total cholesterol and T2DM diagnosis. 
 
 * Using mean cholesterol in the one year period after baseline as our exposure measure, how much missingness is there? 
 * Is missingness related to any other factors in the data set? 
@@ -517,7 +522,7 @@ cbind(chol.mod1$coef,chol.mod2$coef)
 
 ```
 
-4\. **Confounding by Utilization Intensity.** Accounting for confounding due to variation in the intensity of healthcare utilization is important for EHR-based analyses. 
+B\. **Confounding by Utilization Intensity.** Accounting for confounding due to variation in the intensity of healthcare utilization is important for EHR-based analyses. 
 
 * How much variability is there in the intensity of utilization in this data set? 
 * Use a measure of intensity of utilization to account for informed presence bias in an analysis of the association between depression diagnosis and T2DM.
@@ -542,7 +547,7 @@ cbind(c(exp(dep.glm1$coef),NA),exp(dep.glm2$coef))
 
 ```
 
-5\. **Outcome Misclassification.** For binary phenotypes we can account for error in the phenotyping process using the classic Magder and Hughes approach. We will try out implementing this method in an analysis of the association between T2DM, using the CART-derived phenotype, and depression diagnosis.
+C\. **Outcome Misclassification.** For binary phenotypes we can account for error in the phenotyping process using the classic Magder and Hughes approach. We will try out implementing this method in an analysis of the association between T2DM, using the CART-derived phenotype, and depression diagnosis.
 
 * What is the crude odds ratios for the association between T2DM (outcome) and having a depression diagnosis (exposure) with and without correction for outcome misclassification?
 * Using logistic regression to adjust for demographic characteristics, what is the adjusted odds ratio for the association between T2DM (outcome) and having a depression diagnosis (exposure) with and without correction for outcome misclassification?
@@ -618,7 +623,7 @@ summary(mod.valid)
 data.frame(MH = exp(mod.MH$coef), Naive = exp(mod.cart$coef), Validation = exp(mod.valid$coef))
 ```
 
-6\. **Using Probabilistic Phenotypes.** Finally, we will explore correcting for error in our phenotype using a continuous phenotype.
+D\. **Using Probabilistic Phenotypes.** Finally, we will explore correcting for error in our phenotype using a continuous phenotype.
 
 * Using predicted probabilities from your logistic regression-based phenotype derived in exercise 2, estimate the association between having a depression diagnosis code and T2DM. 
 * How do your results change if you use the bias correction approach described in lecture vs the uncorrected results?
