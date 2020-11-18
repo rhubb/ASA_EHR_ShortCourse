@@ -533,7 +533,7 @@ bias.adjust.prob <- function(fmla,mu0,mu1,p0,link = "ident"){
   # regress probabilistic phenotype on predictors
   fitp = lm(fmla, data = data1)
   
-  # make bias correctioon
+  # make bias correction
   betastar = fitp$coef/(mu1 - mu0)
   
   if (link == "ident"){
